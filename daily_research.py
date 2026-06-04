@@ -37,17 +37,24 @@ from pathlib import Path
 NB = None  # id del notebook creato (per cleanup)
 
 
-def run(args, capture_json=False, timeout=None):
-    """Esegue il CLI notebooklm; opzionalmente parsa l'output JSON."""
+def run(args, capture_json=False, timeout=None, retries=0, retry_wait=30):
+    """Esegue il CLI notebooklm; opzionalmente parsa JSON e ritenta su errore.
+
+    L'API e' non ufficiale e ogni tanto fallisce in modo transitorio:
+    con retries>0 il comando viene ritentato qualche volta prima di arrendersi.
+    """
+    import time
     cmd = ["notebooklm", "--quiet"] + args
-    print("» " + " ".join(cmd), flush=True)
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    if res.returncode != 0:
+    for attempt in range(retries + 1):
+        print("» " + " ".join(cmd), flush=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if res.returncode == 0:
+            return json.loads(res.stdout) if capture_json else res.stdout
         sys.stderr.write(res.stdout + "\n" + res.stderr + "\n")
-        raise RuntimeError(f"comando fallito ({res.returncode}): {' '.join(args)}")
-    if capture_json:
-        return json.loads(res.stdout)
-    return res.stdout
+        if attempt < retries:
+            print(f"  ↻ tentativo {attempt + 1} fallito, riprovo tra {retry_wait}s...", flush=True)
+            time.sleep(retry_wait)
+    raise RuntimeError(f"comando fallito ({res.returncode}): {' '.join(args)}")
 
 
 def get_query():
@@ -139,20 +146,21 @@ def main():
     NB = nb.get("id") or nb.get("notebook", {}).get("id")
     print(f"Notebook: {NB}", flush=True)
 
-    # 3. web research + import fonti citate
+    # 3. web research + import fonti citate (con retry: API non ufficiale)
     run([
         "source", "add-research", query,
         "-n", NB, "--mode", mode, "--import-all", "--cited-only",
         "--timeout", str(timeout), "--json",
-    ], capture_json=True, timeout=timeout * 2 + 120)
+    ], capture_json=True, timeout=timeout * 2 + 120, retries=2, retry_wait=60)
 
-    # 4. report + download markdown
+    # 4. report editoriale custom + download markdown
+    instr_file = Path(__file__).parent / "report_instructions.txt"
     run([
-        "generate", "report", "-n", NB, "--format", "briefing-doc",
+        "generate", "report", "-n", NB, "--format", "custom",
+        "--prompt-file", str(instr_file),
         "--language", lang,
-        "--append", "Scrivi il report interamente in italiano.",
         "--wait", "--timeout", "600", "--json",
-    ], capture_json=True, timeout=720)
+    ], capture_json=True, timeout=720, retries=2, retry_wait=30)
 
     out = Path(f"report-{today}.md")
     run(["download", "report", str(out), "-n", NB, "--latest", "--force"])
