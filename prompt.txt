@@ -1,1 +1,9 @@
-Quali sono le notizie, le tendenze e gli eventi più rilevanti nel mondo dell'arte e del design nelle ultime 24-48 ore? Includi: mostre ed esposizioni, nuove opere o collezioni, premi e riconoscimenti, aste e mercato dell'arte, design di prodotto e d'interni, grafica e tipografia, architettura, e figure emergenti. Concentrati su fatti concreti e cita sempre le fonti.
+Quali sono le notizie, le tendenze, i progetti e gli eventi più interessanti delle ultime 24-48 ore nei seguenti ambiti della cultura visiva e creativa? Cerca in particolare:
+
+- ARTE e ARTE VISIVA: nuove opere, artisti emergenti, installazioni, mostre, fotografia, illustrazione, arte digitale e generativa.
+- PRODUCT DESIGN: nuovi oggetti e prodotti di design, materiali, mobili, lighting, premi di design, collaborazioni tra brand e designer.
+- GRAPHIC DESIGN: identità visive, rebranding, packaging, poster, tipografia, editoria, progetti grafici notevoli.
+- UI / UX / DIGITAL DESIGN: nuove interfacce, design system, tendenze UI, strumenti per designer, casi studio di prodotto digitale.
+- MUSICA: uscite e progetti che si intrecciano con la cultura visiva (copertine, art direction, video musicali, identità di artisti, eventi audiovisivi).
+
+Concentrati su fatti concreti, progetti reali e nomi specifici. Privilegia ciò che è fresco, visivamente forte e raccontabile. Cita sempre le fonti con il link.
