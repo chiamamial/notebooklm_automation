@@ -11,7 +11,7 @@ name: Keep NotebookLM session warm
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # ogni 15 minuti (best-effort)
+    - cron: "17 * * * *"   # ogni ora (minuto 17 per evitare i picchi a :00)
   workflow_dispatch: {}
 
 # Evita run sovrapposti
@@ -28,6 +28,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - run: pip install -r requirements.txt
       - name: Refresh sessione
         env:
