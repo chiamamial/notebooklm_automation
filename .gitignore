@@ -1,0 +1,5 @@
+report-*.md
+storage_state.json
+*.local
+__pycache__/
+.venv/

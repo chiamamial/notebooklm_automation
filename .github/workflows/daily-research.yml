@@ -1,0 +1,45 @@
+name: Daily NotebookLM Research
+
+on:
+  schedule:
+    # 06:30 UTC ogni giorno (~08:30 ora italiana in estate, 07:30 in inverno).
+    # GitHub usa UTC. Modifica qui per cambiare orario.
+    - cron: "30 6 * * *"
+  workflow_dispatch: {}   # permette il lancio manuale dalla tab Actions
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installa notebooklm-py
+        run: pip install -r requirements.txt
+
+      - name: Verifica autenticazione
+        env:
+          NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
+        run: notebooklm auth check --test
+
+      - name: Deep research + report + email
+        env:
+          NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
+          RESEARCH_MODE: deep
+          RESEARCH_TIMEOUT: "1800"
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python daily_research.py
+
+      - name: Salva il report come artifact del run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-report
+          path: report-*.md
+          if-no-files-found: ignore

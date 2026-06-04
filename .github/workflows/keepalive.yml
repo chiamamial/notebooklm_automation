@@ -1,0 +1,35 @@
+name: Keep NotebookLM session warm
+
+# I cookie di Google scadono se la sessione resta inattiva troppo a lungo.
+# Questo workflow tiene "calda" la sessione facendo un refresh leggero.
+#
+# NOTA IMPORTANTE: il cron di GitHub Actions ha cadenza MINIMA ~5 min ma in
+# pratica gira in modo irregolare (ritardi anche di 10-30 min sotto carico).
+# Per questo lo scheduling cloud del keepalive NON e' garantito affidabile.
+# Se la sessione continua a scadere, fai girare il refresh sul tuo Mac
+# (vedi README, opzione launchd) che e' molto piu' puntuale.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # ogni 15 minuti (best-effort)
+  workflow_dispatch: {}
+
+# Evita run sovrapposti
+concurrency:
+  group: notebooklm-keepalive
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Refresh sessione
+        env:
+          NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
+        run: notebooklm auth refresh
