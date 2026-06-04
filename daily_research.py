@@ -17,6 +17,7 @@ Variabili d'ambiente:
   RESEARCH_QUERY        domanda fissa (oppure usa il file prompt.txt)
   RESEARCH_MODE         "deep" (default) | "fast"
   RESEARCH_TIMEOUT      secondi per fase (default 1800)
+  REPORT_LANGUAGE       lingua del report (default "it")
   KEEP_NOTEBOOK         "1" per NON cancellare il notebook (default: cancella)
   RESEND_API_KEY        API key di Resend (https://resend.com/api-keys)
   MAIL_FROM             mittente (default: onboarding@resend.dev)
@@ -125,6 +126,7 @@ def main():
     query = get_query()
     mode = os.environ.get("RESEARCH_MODE", "deep")
     timeout = int(os.environ.get("RESEARCH_TIMEOUT", "1800"))
+    lang = os.environ.get("REPORT_LANGUAGE", "it")  # lingua del report
 
     # 1. verifica auth (chiamata di rete reale)
     auth = run(["auth", "check", "--test", "--json"], capture_json=True)
@@ -147,6 +149,8 @@ def main():
     # 4. report + download markdown
     run([
         "generate", "report", "-n", NB, "--format", "briefing-doc",
+        "--language", lang,
+        "--append", "Scrivi il report interamente in italiano.",
         "--wait", "--timeout", "600", "--json",
     ], capture_json=True, timeout=720)
 

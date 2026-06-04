@@ -11,7 +11,7 @@ name: Keep NotebookLM session warm
 
 on:
   schedule:
-    - cron: "17 * * * *"   # ogni ora (minuto 17 per evitare i picchi a :00)
+    - cron: "*/15 * * * *"   # ogni 15 min (repo pubblico = minuti illimitati)
   workflow_dispatch: {}
 
 # Evita run sovrapposti
