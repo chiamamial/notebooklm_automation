@@ -1,23 +1,27 @@
 name: Keep NotebookLM session warm
 
-# I cookie di Google scadono se la sessione resta inattiva troppo a lungo.
-# Questo workflow tiene "calda" la sessione facendo un refresh leggero.
+# I cookie di Google vanno "rinfrescati" o la sessione scade. Su GitHub Actions
+# il secret e' in sola lettura, quindi:
+#   1) scriviamo il secret in un profilo locale scrivibile (nlm_home)
+#   2) `auth refresh` ruota e SALVA i cookie in quel profilo
+#   3) ripushiamo il file aggiornato dentro il secret NOTEBOOKLM_AUTH_JSON
+# Cosi' la sessione si auto-mantiene viva senza intervento manuale.
 #
-# NOTA IMPORTANTE: il cron di GitHub Actions ha cadenza MINIMA ~5 min ma in
-# pratica gira in modo irregolare (ritardi anche di 10-30 min sotto carico).
-# Per questo lo scheduling cloud del keepalive NON e' garantito affidabile.
-# Se la sessione continua a scadere, fai girare il refresh sul tuo Mac
-# (vedi README, opzione launchd) che e' molto piu' puntuale.
+# Richiede un secret GH_PAT = Personal Access Token (fine-grained) con permesso
+# "Secrets: write" su questo repo (vedi README).
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # ogni 15 min (repo pubblico = minuti illimitati)
+    - cron: "*/30 * * * *"   # ogni 30 min (repo pubblico = minuti illimitati)
   workflow_dispatch: {}
 
-# Evita run sovrapposti
+# Evita che keepalive e ricerca giornaliera tocchino il secret insieme
 concurrency:
-  group: notebooklm-keepalive
-  cancel-in-progress: true
+  group: notebooklm-auth
+  cancel-in-progress: false
+
+env:
+  NOTEBOOKLM_HOME: ${{ github.workspace }}/nlm_home
 
 jobs:
   refresh:
@@ -30,7 +34,14 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Refresh sessione
+      - name: Refresh sessione e ripush del secret
         env:
-          NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
-        run: notebooklm auth refresh
+          AUTH_SRC: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          SS="$NOTEBOOKLM_HOME/profiles/default/storage_state.json"
+          mkdir -p "$(dirname "$SS")"
+          printf '%s' "$AUTH_SRC" > "$SS"
+          notebooklm auth refresh
+          gh secret set NOTEBOOKLM_AUTH_JSON < "$SS"
+          echo "Secret aggiornato con i cookie ruotati."

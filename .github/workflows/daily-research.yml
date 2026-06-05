@@ -7,6 +7,14 @@ on:
     - cron: "30 6 * * *"
   workflow_dispatch: {}   # permette il lancio manuale dalla tab Actions
 
+# Condivide il "lock" col keepalive: non toccano il secret nello stesso momento
+concurrency:
+  group: notebooklm-auth
+  cancel-in-progress: false
+
+env:
+  NOTEBOOKLM_HOME: ${{ github.workspace }}/nlm_home
+
 jobs:
   research:
     runs-on: ubuntu-latest
@@ -17,24 +25,40 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Installa notebooklm-py
         run: pip install -r requirements.txt
 
-      - name: Verifica autenticazione
+      - name: Prepara la sessione (profilo scrivibile dal secret)
         env:
-          NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
-        run: notebooklm auth check --test
+          AUTH_SRC: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
+        run: |
+          SS="$NOTEBOOKLM_HOME/profiles/default/storage_state.json"
+          mkdir -p "$(dirname "$SS")"
+          printf '%s' "$AUTH_SRC" > "$SS"
 
       - name: Deep research + report + email
         env:
-          NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
           RESEARCH_MODE: deep
           RESEARCH_TIMEOUT: "1800"
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: python daily_research.py
+
+      - name: Ripush dei cookie ruotati nel secret
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          SS="$NOTEBOOKLM_HOME/profiles/default/storage_state.json"
+          if [ -n "$GH_TOKEN" ] && [ -s "$SS" ]; then
+            gh secret set NOTEBOOKLM_AUTH_JSON < "$SS"
+            echo "Secret aggiornato."
+          else
+            echo "::warning::GH_PAT non impostato: salto l'aggiornamento del secret."
+          fi
 
       - name: Salva il report come artifact del run
         if: always()

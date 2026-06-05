@@ -47,6 +47,20 @@ e crea:
 | `RESEND_API_KEY` | la API key di Resend (https://resend.com/api-keys) |
 | `MAIL_FROM` | mittente. In test usa `onboarding@resend.dev`; con dominio verificato, es. `research@tuodominio.it` |
 | `MAIL_TO` | destinatario (es. chiamamial93@gmail.com) |
+| `GH_PAT` | Personal Access Token per auto-aggiornare la sessione (vedi sotto) |
+
+**Perché serve `GH_PAT`:** i cookie di Google scadono se non vengono
+"rinfrescati". Il workflow li rinfresca e poi deve **riscrivere il secret**
+`NOTEBOOKLM_AUTH_JSON` con i cookie aggiornati — ma per scrivere un secret
+serve un token con quel permesso (il token di default di Actions è in sola
+lettura). Crea un **fine-grained PAT**:
+1. https://github.com/settings/personal-access-tokens/new
+2. **Repository access** → *Only select repositories* → `notebooklm_automation`
+3. **Permissions → Repository → Secrets** → *Read and write*
+4. Genera, copia il token e mettilo nel secret `GH_PAT`.
+
+Senza `GH_PAT` tutto funziona lo stesso, ma la sessione **non si auto-mantiene**:
+dovrai rifare il login e aggiornare `NOTEBOOKLM_AUTH_JSON` a mano quando scade.
 
 **Copia il contenuto dell'auth negli appunti** (macOS):
 ```bash
