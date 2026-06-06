@@ -37,6 +37,7 @@ cp vps/notebooklm-*.service vps/notebooklm-*.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now notebooklm-keepalive.timer
 systemctl enable --now notebooklm-research.timer
+systemctl enable --now notebooklm-watcher.timer
 
 echo
 echo "== FATTO =="

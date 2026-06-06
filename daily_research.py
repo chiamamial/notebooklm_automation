@@ -202,6 +202,18 @@ def main():
     first_line = body.lstrip("# ").splitlines()[0] if body.strip() else "Daily Research"
     send_email(f"🧠 Daily Research {today} — {first_line[:80]}", body, out)
 
+    # 6. (opzionale) scrivi una riga per news nel database Notion
+    nt = os.environ.get("NOTION_TOKEN")
+    ndb = os.environ.get("NOTION_DB_ID")
+    if nt and ndb:
+        try:
+            import notion_sync
+            items = notion_sync.parse_news(body)
+            n = notion_sync.add_news_rows(nt, ndb, items, today)
+            print(f"Notion: {n} news aggiunte al database", flush=True)
+        except Exception as e:
+            print(f"(Notion: scrittura fallita, ignoro: {e})", flush=True)
+
 
 if __name__ == "__main__":
     try:
