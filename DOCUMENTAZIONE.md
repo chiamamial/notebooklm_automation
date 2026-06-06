@@ -19,6 +19,7 @@ editoriale** in italiano via email.
 6. [Manutenzione della sessione Google](#6-manutenzione-della-sessione-google)
 7. [Problemi comuni e soluzioni](#7-problemi-comuni-e-soluzioni)
 8. [Riferimento tecnico](#8-riferimento-tecnico)
+9. [Cruscotto Notion + articoli on-demand](#9-cruscotto-notion)
 
 ---
 
@@ -232,3 +233,43 @@ Con `onboarding@resend.dev` la mail arriva solo all'indirizzo del proprio accoun
 Resend. Per inviare ad altri indirizzi: verificare un dominio su Resend
 (Domains → Add) e usare un mittente tipo `redazione@tuodominio.it` in `MAIL_FROM`.
 ```
+
+---
+
+## 9. Cruscotto Notion
+
+Oltre all'email, ogni news del brief finisce come **riga** in un database Notion
+("Radar News"). Spuntando la casella **✅ Scrivi articolo**, il sistema genera
+un articolo completo (articolo + SEO + social + immagini) e lo scrive **dentro
+la pagina Notion**, mettendo poi **Stato = Fatto**.
+
+🔗 Database: https://app.notion.com/p/234c80b5af8546f38b1b1fc866b876f1
+
+### Flusso d'uso
+```
+Brief 07:00  →  righe nel database  →  spunti ✅ le news che vuoi
+   →  entro ~5 min l'articolo appare nella pagina  →  Stato = Fatto
+```
+
+### Pezzi tecnici
+- `notion_sync.py` — parla con l'API Notion (crea righe, legge spunte, scrive articoli)
+- `notion_watcher.py` — controllore: cerca le spunte e genera gli articoli
+- `notebooklm-watcher.timer` — lo lancia ogni 5 minuti
+- `approfondisci.py` — genera il "kit articolo" (usato anche a mano via email)
+
+### Generare un articolo a mano (senza Notion)
+```bash
+cd /opt/notebooklm && set -a && . ./notebooklm.env && set +a && \
+  NOTEBOOKLM_HOME=/opt/notebooklm/nlm_home .venv/bin/python approfondisci.py "la tua news"
+```
+
+### Lanciare il controllore Notion a mano
+```bash
+systemctl start notebooklm-watcher.service
+journalctl -u notebooklm-watcher.service -f
+```
+
+### Token Notion
+Serve un'integrazione interna Notion (token `ntn_...`) salvata in `notebooklm.env`
+come `NOTION_TOKEN`, e il database condiviso con quell'integrazione
+(database → ••• → Connections). `NOTION_DB_ID` è l'ID del database.
