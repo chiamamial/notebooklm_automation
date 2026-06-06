@@ -31,6 +31,8 @@ def pulisci(md):
         if not titolo_rimosso and st.startswith("# ") and not st.startswith("## "):
             titolo_rimosso = True
             continue
+        if re.fullmatch(r"[*_\\~`]+", st):   # riga di soli simboli (artefatti)
+            continue
         m = re.match(r"^(#{1,6})\s+(?:\d+[.)]\s+)?(.+?)\s*$", ln)
         if m:
             etic = re.sub(r"\s*\(.*\)\s*$", "", m.group(2))      # togli "(...)"

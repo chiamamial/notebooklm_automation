@@ -12,7 +12,6 @@ Funzioni:
 Variabili d'ambiente: NOTION_TOKEN, NOTION_DB_ID
 """
 
-import os
 import re
 import json
 import urllib.request
@@ -183,7 +182,9 @@ def md_to_blocks(md):
         if not s.strip():
             continue
         ls = s.lstrip()
-        if s.startswith("### "):
+        if re.fullmatch(r"-{3,}|\*{3,}|_{3,}", ls):
+            blocks.append({"type": "divider", "divider": {}})
+        elif s.startswith("### "):
             blocks.append({"type": "heading_3", "heading_3": {"rich_text": parse_inline(s[4:])}})
         elif s.startswith("## "):
             blocks.append({"type": "heading_2", "heading_2": {"rich_text": parse_inline(s[3:])}})
