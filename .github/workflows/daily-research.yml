@@ -39,8 +39,8 @@ jobs:
 
       - name: Deep research + report + email
         env:
-          RESEARCH_MODE: deep
-          RESEARCH_TIMEOUT: "1800"
+          RESEARCH_MODE: fast
+          RESEARCH_TIMEOUT: "600"
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
