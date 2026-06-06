@@ -72,21 +72,17 @@ contenuto **fino all'intestazione `## SEO`**. Le sezioni `## SEO`, `## SOCIAL`,
 
 ## 4. Quali righe pubblicare
 
-⚠️ **Manca una proprietà di pubblicazione esplicita.** Due opzioni (scegliere A):
-
-**A) (consigliato) Aggiungere al database una checkbox `Pubblica`.**
-Il sito mostra solo le righe con `Pubblica = true`. Query:
+✅ Esiste già la checkbox **`Pubblica`**. Il sito mostra SOLO le righe con
+`Pubblica = true` (e corpo pagina non vuoto). Query:
 ```json
 { "filter": { "and": [
   { "property": "Pubblica", "checkbox": { "equals": true } }
 ] } }
 ```
 
-**B) Ripiego senza nuove proprietà:** mostrare le righe con `Stato = "Fatto"`
-(= articolo già scritto). Query:
-```json
-{ "filter": { "property": "Stato", "select": { "equals": "Fatto" } } }
-```
+> Formato esatto del corpo articolo: vedere **FORMATO-ARTICOLI.md**. In sintesi:
+> il corpo NON ripete il titolo, inizia con un paragrafo d'attacco, usa `##`/`###`
+> per le sezioni, e la parte pubblica finisce all'intestazione esatta `## SEO`.
 
 ## 5. Proprietà consigliate da aggiungere (per un sito pulito)
 
