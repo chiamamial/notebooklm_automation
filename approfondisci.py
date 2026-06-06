@@ -22,19 +22,28 @@ from daily_research import run, send_email
 def pulisci(md):
     """Forza il formato KANRI sull'output di NotebookLM (che spesso devia)."""
     md = md.replace("\\*", "*").replace("\\_", "_")  # togli escape
-    lines = md.splitlines()
+    SEZIONI = {"seo": "## SEO", "social": "## SOCIAL",
+               "immagini": "## IMMAGINI", "note fonti": "## NOTE FONTI"}
     out, titolo_rimosso = [], False
-    for ln in lines:
+    for ln in md.splitlines():
         st = ln.strip()
         # rimuovi un eventuale titolo "# ..." in cima (vietato dal formato)
         if not titolo_rimosso and st.startswith("# ") and not st.startswith("## "):
             titolo_rimosso = True
             continue
+        m = re.match(r"^(#{1,6})\s+(?:\d+[.)]\s+)?(.+?)\s*$", ln)
+        if m:
+            etic = re.sub(r"\s*\(.*\)\s*$", "", m.group(2))      # togli "(...)"
+            etic = re.sub(r"[*_:#]", "", etic).strip().lower()    # normalizza
+            if etic == "articolo":
+                continue                                          # via il wrapper ARTICOLO
+            if etic in SEZIONI:
+                out.append(SEZIONI[etic])                         # intestazione esatta
+            else:
+                out.append(f"{m.group(1)} {m.group(2)}")          # heading senza numero
+            continue
         out.append(ln)
-    md = "\n".join(out)
-    # normalizza intestazioni numerate: "## 2. SEO" -> "## SEO"
-    md = re.sub(r"(?m)^(#{2,3})\s+\d+[.)]\s+", r"\1 ", md)
-    return md.strip()
+    return "\n".join(out).strip()
 
 
 def genera_kit(topic):
