@@ -5,8 +5,8 @@ Deep research giornaliera con NotebookLM -> report Markdown -> email.
 Flusso:
   1. crea un notebook "Daily Research <data>"
   2. lancia una web research (deep/fast) e importa le fonti citate
-  3. genera un report (briefing-doc) e lo scarica in Markdown
-  4. invia il report via email (Gmail SMTP)
+  3. genera un report editoriale e lo scarica in Markdown
+  4. invia il report via email (Resend API)
   5. (opzionale) cancella il notebook per non accumulare
 
 L'autenticazione NotebookLM e' letta dal CLI tramite la variabile
@@ -15,8 +15,8 @@ NOTEBOOKLM_AUTH_JSON (contenuto di storage_state.json) oppure dal file
 
 Variabili d'ambiente:
   RESEARCH_QUERY        domanda fissa (oppure usa il file prompt.txt)
-  RESEARCH_MODE         "deep" (default) | "fast"
-  RESEARCH_TIMEOUT      secondi per fase (default 1800)
+  RESEARCH_MODE         "fast" (default) | "deep"
+  RESEARCH_TIMEOUT      tetto secondi per fase (default 600)
   REPORT_LANGUAGE       lingua del report (default "it")
   KEEP_NOTEBOOK         "1" per NON cancellare il notebook (default: cancella)
   RESEND_API_KEY        API key di Resend (https://resend.com/api-keys)
@@ -50,16 +50,23 @@ def run(args, capture_json=False, timeout=None, retries=0, retry_wait=30):
     """
     import time
     cmd = [NOTEBOOKLM_BIN, "--quiet"] + args
+    last_err = "?"
     for attempt in range(retries + 1):
-        print("» " + " ".join(cmd), flush=True)
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if res.returncode == 0:
-            return json.loads(res.stdout) if capture_json else res.stdout
-        sys.stderr.write(res.stdout + "\n" + res.stderr + "\n")
+        print("» " + " ".join(cmd[:4]) + (" ..." if len(cmd) > 4 else ""), flush=True)
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            last_err = f"timeout dopo {timeout}s"
+            sys.stderr.write(last_err + "\n")
+        else:
+            if res.returncode == 0:
+                return json.loads(res.stdout) if capture_json else res.stdout
+            last_err = f"exit {res.returncode}"
+            sys.stderr.write((res.stdout or "") + "\n" + (res.stderr or "") + "\n")
         if attempt < retries:
-            print(f"  ↻ tentativo {attempt + 1} fallito, riprovo tra {retry_wait}s...", flush=True)
+            print(f"  ↻ tentativo {attempt + 1} fallito ({last_err}), riprovo tra {retry_wait}s...", flush=True)
             time.sleep(retry_wait)
-    raise RuntimeError(f"comando fallito ({res.returncode}): {' '.join(args)}")
+    raise RuntimeError(f"comando fallito ({last_err}): {args[0]} {args[1] if len(args) > 1 else ''}")
 
 
 def get_query():
@@ -75,23 +82,42 @@ def get_query():
 def md_to_html(md):
     """Conversione minimale Markdown -> HTML (titoli, grassetto, liste)."""
     import re
-    html_lines = []
+    import html as _html
+
+    def fmt(text):
+        # sanitizza poi applica il grassetto **...**
+        text = _html.escape(text)
+        return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+
+    out, in_list = [], False
+    def close_list():
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
     for line in md.splitlines():
+        s = line.strip()
+        if s.startswith(("- ", "* ")):
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{fmt(s[2:])}</li>")
+            continue
+        close_list()
         if line.startswith("### "):
-            html_lines.append(f"<h3>{line[4:]}</h3>")
+            out.append(f"<h3>{fmt(line[4:])}</h3>")
         elif line.startswith("## "):
-            html_lines.append(f"<h2>{line[3:]}</h2>")
+            out.append(f"<h2>{fmt(line[3:])}</h2>")
         elif line.startswith("# "):
-            html_lines.append(f"<h1>{line[2:]}</h1>")
-        elif line.strip().startswith(("- ", "* ")):
-            html_lines.append(f"<li>{line.strip()[2:]}</li>")
-        elif line.strip() == "":
-            html_lines.append("<br>")
+            out.append(f"<h1>{fmt(line[2:])}</h1>")
+        elif s == "":
+            continue
         else:
-            html_lines.append(f"<p>{line}</p>")
-    html = "\n".join(html_lines)
-    html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html)
-    return f'<div style="font-family:sans-serif;max-width:680px;margin:auto">{html}</div>'
+            out.append(f"<p>{fmt(line)}</p>")
+    close_list()
+    body = "\n".join(out)
+    return f'<div style="font-family:sans-serif;max-width:680px;margin:auto;line-height:1.5">{body}</div>'
 
 
 def send_email(subject, markdown_body, attachment_path):
@@ -136,8 +162,8 @@ def main():
     global NB
     today = date.today().isoformat()
     query = get_query()
-    mode = os.environ.get("RESEARCH_MODE", "deep")
-    timeout = int(os.environ.get("RESEARCH_TIMEOUT", "1800"))
+    mode = os.environ.get("RESEARCH_MODE", "fast")
+    timeout = int(os.environ.get("RESEARCH_TIMEOUT", "600"))  # tetto per fase (s)
     lang = os.environ.get("REPORT_LANGUAGE", "it")  # lingua del report
 
     # 1. verifica auth (chiamata di rete reale)
@@ -156,7 +182,7 @@ def main():
         "source", "add-research", query,
         "-n", NB, "--mode", mode, "--import-all", "--cited-only",
         "--timeout", str(timeout), "--json",
-    ], capture_json=True, timeout=timeout * 2 + 120, retries=2, retry_wait=60)
+    ], capture_json=True, timeout=timeout * 2 + 60, retries=1, retry_wait=30)
 
     # 4. report editoriale custom + download markdown
     instr_file = Path(__file__).parent / "report_instructions.txt"
