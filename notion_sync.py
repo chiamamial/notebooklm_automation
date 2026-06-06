@@ -128,10 +128,52 @@ def uncheck(token, page_id):
          {"properties": {"Scrivi articolo": {"checkbox": False}}})
 
 
-def _rt(text):
-    text = (text or "").replace("**", "")
-    chunks = [text[i:i + 1900] for i in range(0, len(text), 1900)] or [""]
-    return [{"type": "text", "text": {"content": c}} for c in chunks]
+def _txt(content, bold=False, italic=False, link=None):
+    """Uno o piu' oggetti rich_text (spezzati a 1900 char), con annotazioni."""
+    out = []
+    for i in range(0, len(content) or 1, 1900):
+        chunk = content[i:i + 1900]
+        t = {"content": chunk}
+        if link:
+            t["link"] = {"url": link}
+        out.append({
+            "type": "text",
+            "text": t,
+            "annotations": {"bold": bold, "italic": italic},
+        })
+    return out
+
+
+_INLINE = re.compile(
+    r"\[([^\]]+)\]\((https?://[^)\s]+)\)"   # 1,2  link [testo](url)
+    r"|\*\*(.+?)\*\*"                        # 3    **grassetto**
+    r"|__(.+?)__"                            # 4    __grassetto__
+    r"|\*(.+?)\*"                            # 5    *corsivo*
+    r"|_(.+?)_"                              # 6    _corsivo_
+)
+
+
+def parse_inline(text):
+    """Converte markdown inline (grassetto/corsivo/link) in rich_text Notion."""
+    text = (text or "").replace("\\*", "*").replace("\\_", "_")
+    out, pos = [], 0
+    for m in _INLINE.finditer(text):
+        if m.start() > pos:
+            out += _txt(text[pos:m.start()])
+        if m.group(1) is not None:
+            out += _txt(m.group(1), link=m.group(2))
+        elif m.group(3) is not None:
+            out += _txt(m.group(3), bold=True)
+        elif m.group(4) is not None:
+            out += _txt(m.group(4), bold=True)
+        elif m.group(5) is not None:
+            out += _txt(m.group(5), italic=True)
+        elif m.group(6) is not None:
+            out += _txt(m.group(6), italic=True)
+        pos = m.end()
+    if pos < len(text):
+        out += _txt(text[pos:])
+    return out or _txt("")
 
 
 def md_to_blocks(md):
@@ -140,17 +182,20 @@ def md_to_blocks(md):
         s = line.rstrip()
         if not s.strip():
             continue
+        ls = s.lstrip()
         if s.startswith("### "):
-            blocks.append({"type": "heading_3", "heading_3": {"rich_text": _rt(s[4:])}})
+            blocks.append({"type": "heading_3", "heading_3": {"rich_text": parse_inline(s[4:])}})
         elif s.startswith("## "):
-            blocks.append({"type": "heading_2", "heading_2": {"rich_text": _rt(s[3:])}})
+            blocks.append({"type": "heading_2", "heading_2": {"rich_text": parse_inline(s[3:])}})
         elif s.startswith("# "):
-            blocks.append({"type": "heading_1", "heading_1": {"rich_text": _rt(s[2:])}})
-        elif s.lstrip().startswith(("- ", "* ")):
+            blocks.append({"type": "heading_2", "heading_2": {"rich_text": parse_inline(s[2:])}})
+        elif ls.startswith("> "):
+            blocks.append({"type": "quote", "quote": {"rich_text": parse_inline(ls[2:])}})
+        elif ls.startswith(("- ", "* ")):
             blocks.append({"type": "bulleted_list_item",
-                           "bulleted_list_item": {"rich_text": _rt(s.lstrip()[2:])}})
+                           "bulleted_list_item": {"rich_text": parse_inline(ls[2:])}})
         else:
-            blocks.append({"type": "paragraph", "paragraph": {"rich_text": _rt(s)}})
+            blocks.append({"type": "paragraph", "paragraph": {"rich_text": parse_inline(s)}})
     return blocks
 
 
