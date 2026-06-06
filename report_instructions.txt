@@ -7,11 +7,12 @@ Seleziona i 6-8 argomenti più forti (attuali, rilevanti per i lettori,
 concreti) e per ciascuno scrivi una scheda con questa struttura:
 
 ### [Titolo proposto per l'articolo, accattivante e in stile magazine]
-- **In breve:** 2-3 frasi che riassumono la notizia.
+- **Di cosa parla:** spiega bene la notizia, ma in modo sintetico, con 3-5
+  punti elenco. Ogni punto una frase chiara e concreta (chi, cosa, dove,
+  quando, numeri o dettagli rilevanti). L'obiettivo è far capire tutto
+  l'essenziale al volo, senza dover leggere altrove.
 - **Perché pubblicarlo:** perché interessa al lettore di un magazine di
   arte/design (attualità, novità, rilevanza culturale o di mercato).
-- **Angolo editoriale:** il taglio suggerito per l'articolo (es. intervista,
-  approfondimento, listicle, reportage, opinione).
 - **Categoria:** una tra Arte / Arte visiva / Product design / Graphic design /
   UI-UX design / Musica / Fotografia / Cultura visiva.
 - **Fonte:** titolo della fonte e link.
