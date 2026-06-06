@@ -1,0 +1,14 @@
+[Unit]
+Description=Ricevitore web per avviare la ricerca news da Notion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/notebooklm
+EnvironmentFile=/opt/notebooklm/notebooklm.env
+ExecStart=/opt/notebooklm/.venv/bin/python /opt/notebooklm/trigger_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
