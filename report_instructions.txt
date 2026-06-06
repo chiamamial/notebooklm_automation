@@ -14,10 +14,9 @@ STRUTTURA: una lista di 6-8 schede, una per notizia, ordinate dalla più
 importante. Ogni scheda ESATTAMENTE in questo formato:
 
 ## [Titolo proposto per l'articolo, accattivante e in stile magazine]
-- **Di cosa parla:**
-  - 3-5 trattini, uno per punto. Ogni punto UNA frase breve e concreta
-    (chi, cosa, dove, quando, numeri o dettagli chiave).
-  - Insieme i punti devono far capire tutta la notizia, senza leggere altrove.
+- **Di cosa parla:** un paragrafo chiaro e sintetico (3-5 frasi) che fa capire
+  tutta la notizia senza leggere altrove: chi, cosa, dove, quando, numeri o
+  dettagli chiave. Metti in **grassetto** i nomi e i dati più importanti.
 - **Perché pubblicarlo:** una o due frasi sul perché interessa al lettore.
 - **Categoria:** una tra Arte / Arte visiva / Product design / Graphic design /
   UI-UX design / Architettura / Musica / Fotografia / Cultura visiva.
