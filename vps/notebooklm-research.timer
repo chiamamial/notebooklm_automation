@@ -2,8 +2,8 @@
 Description=Lancia la ricerca NotebookLM ogni mattina
 
 [Timer]
-# Ora locale del VPS. Per impostare il fuso: timedatectl set-timezone Europe/Rome
-OnCalendar=*-*-* 07:30:00
+# Ora locale del VPS (fuso impostato a Europe/Rome). 07:00 ora italiana.
+OnCalendar=*-*-* 07:00:00
 Persistent=true
 
 [Install]
