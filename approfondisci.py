@@ -11,11 +11,30 @@ Notion (notion_watcher.py).
 """
 
 import os
+import re
 import sys
 from datetime import date
 from pathlib import Path
 
 from daily_research import run, send_email
+
+
+def pulisci(md):
+    """Forza il formato KANRI sull'output di NotebookLM (che spesso devia)."""
+    md = md.replace("\\*", "*").replace("\\_", "_")  # togli escape
+    lines = md.splitlines()
+    out, titolo_rimosso = [], False
+    for ln in lines:
+        st = ln.strip()
+        # rimuovi un eventuale titolo "# ..." in cima (vietato dal formato)
+        if not titolo_rimosso and st.startswith("# ") and not st.startswith("## "):
+            titolo_rimosso = True
+            continue
+        out.append(ln)
+    md = "\n".join(out)
+    # normalizza intestazioni numerate: "## 2. SEO" -> "## SEO"
+    md = re.sub(r"(?m)^(#{2,3})\s+\d+[.)]\s+", r"\1 ", md)
+    return md.strip()
 
 
 def genera_kit(topic):
@@ -49,8 +68,9 @@ def genera_kit(topic):
 
         out = Path(f"articolo-{today}-{nbid[:6]}.md")
         run(["download", "report", str(out), "-n", nbid, "--latest", "--force"])
-        body = out.read_text(encoding="utf-8")
-        print(f"Kit generato ({len(body)} char)", flush=True)
+        body = pulisci(out.read_text(encoding="utf-8"))
+        out.write_text(body, encoding="utf-8")
+        print(f"Kit generato e ripulito ({len(body)} char)", flush=True)
         return body, out
     finally:
         if os.environ.get("KEEP_NOTEBOOK", "") not in ("1", "true", "yes"):
