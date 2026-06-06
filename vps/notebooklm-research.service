@@ -8,4 +8,5 @@ Type=oneshot
 WorkingDirectory=/opt/notebooklm
 EnvironmentFile=/opt/notebooklm/notebooklm.env
 Environment=NOTEBOOKLM_HOME=/opt/notebooklm/nlm_home
+Environment=PATH=/opt/notebooklm/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/opt/notebooklm/.venv/bin/python /opt/notebooklm/daily_research.py

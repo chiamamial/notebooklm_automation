@@ -36,6 +36,11 @@ from pathlib import Path
 
 NB = None  # id del notebook creato (per cleanup)
 
+# Risolve l'eseguibile "notebooklm": prima nel venv corrente (stesso bin di
+# python, utile sotto systemd dove il PATH e' minimale), poi dal PATH.
+_VENV_BIN = os.path.join(os.path.dirname(sys.executable), "notebooklm")
+NOTEBOOKLM_BIN = _VENV_BIN if os.path.exists(_VENV_BIN) else "notebooklm"
+
 
 def run(args, capture_json=False, timeout=None, retries=0, retry_wait=30):
     """Esegue il CLI notebooklm; opzionalmente parsa JSON e ritenta su errore.
@@ -44,7 +49,7 @@ def run(args, capture_json=False, timeout=None, retries=0, retry_wait=30):
     con retries>0 il comando viene ritentato qualche volta prima di arrendersi.
     """
     import time
-    cmd = ["notebooklm", "--quiet"] + args
+    cmd = [NOTEBOOKLM_BIN, "--quiet"] + args
     for attempt in range(retries + 1):
         print("» " + " ".join(cmd), flush=True)
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
