@@ -1,11 +1,10 @@
 name: Daily NotebookLM Research
 
 on:
-  schedule:
-    # 06:30 UTC ogni giorno (~08:30 ora italiana in estate, 07:30 in inverno).
-    # GitHub usa UTC. Modifica qui per cambiare orario.
-    - cron: "30 6 * * *"
-  workflow_dispatch: {}   # permette il lancio manuale dalla tab Actions
+  # Schedule DISATTIVATO: la sessione ora vive sul VPS (unica "casa").
+  # Tenere attivi sia GitHub sia VPS desincronizza i cookie di Google.
+  # Lasciato solo l'avvio manuale come riserva d'emergenza.
+  workflow_dispatch: {}
 
 # Condivide il "lock" col keepalive: non toccano il secret nello stesso momento
 concurrency:

@@ -11,8 +11,8 @@ name: Keep NotebookLM session warm
 # "Secrets: write" su questo repo (vedi README).
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"   # ogni 30 min (repo pubblico = minuti illimitati)
+  # Schedule DISATTIVATO: il keepalive ora gira sul VPS (systemd timer).
+  # Lasciato solo l'avvio manuale.
   workflow_dispatch: {}
 
 # Evita che keepalive e ricerca giornaliera tocchino il secret insieme
