@@ -1,6 +1,7 @@
 report-*.md
 storage_state.json
 nlm_home/
+notebooklm.env
 *.local
 __pycache__/
 .venv/

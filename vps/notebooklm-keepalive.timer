@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh sessione NotebookLM ogni 20 minuti
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=20min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

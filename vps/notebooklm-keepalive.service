@@ -1,0 +1,9 @@
+[Unit]
+Description=Mantiene viva la sessione NotebookLM (refresh cookie)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=NOTEBOOKLM_HOME=/opt/notebooklm/nlm_home
+ExecStart=/opt/notebooklm/.venv/bin/notebooklm auth refresh

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily NotebookLM deep research -> email
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/notebooklm
+EnvironmentFile=/opt/notebooklm/notebooklm.env
+Environment=NOTEBOOKLM_HOME=/opt/notebooklm/nlm_home
+ExecStart=/opt/notebooklm/.venv/bin/python /opt/notebooklm/daily_research.py
