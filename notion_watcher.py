@@ -11,8 +11,7 @@ import os
 import sys
 
 import notion_sync
-from daily_research import run
-from approfondisci import genera_kit
+from kanri_article import genera_articolo
 
 
 def main():
@@ -27,19 +26,11 @@ def main():
         return
     print(f"{len(rows)} riga/e da approfondire.", flush=True)
 
-    # verifica auth una volta sola
-    auth = run(["auth", "check", "--test", "--json"], capture_json=True)
-    if auth.get("status") != "ok":
-        raise RuntimeError(f"auth non valida: {auth}")
-
     for r in rows:
-        topic = r["title"]
-        if r["summary"]:
-            topic += f". Contesto: {r['summary']}"
         print(f"→ Approfondisco: {r['title'][:60]}", flush=True)
         notion_sync.set_status(token, r["page_id"], "In corso")
         try:
-            body, _ = genera_kit(topic)
+            body = genera_articolo(r["title"], r.get("summary", ""))
             notion_sync.append_markdown(token, r["page_id"], body)
             notion_sync.uncheck(token, r["page_id"])
             notion_sync.set_status(token, r["page_id"], "Fatto")

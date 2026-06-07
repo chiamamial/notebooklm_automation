@@ -53,6 +53,32 @@ def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=2):
     raise RuntimeError(f"OpenRouter fallito: {last}")
 
 
+def pulisci(md):
+    """Forza il formato KANRI sull'output LLM (toglie titolo, denumera sezioni,
+    pulisce escape e righe-artefatto)."""
+    md = md.replace("\\*", "*").replace("\\_", "_")
+    SEZIONI = {"seo": "## SEO", "social": "## SOCIAL",
+               "immagini": "## IMMAGINI", "note fonti": "## NOTE FONTI"}
+    out, titolo_rimosso = [], False
+    for ln in md.splitlines():
+        st = ln.strip()
+        if not titolo_rimosso and st.startswith("# ") and not st.startswith("## "):
+            titolo_rimosso = True
+            continue
+        if re.fullmatch(r"[*_\\~`]+", st):
+            continue
+        m = re.match(r"^(#{1,6})\s+(?:\d+[.)]\s+)?(.+?)\s*$", ln)
+        if m:
+            etic = re.sub(r"\s*\(.*\)\s*$", "", m.group(2))
+            etic = re.sub(r"[*_:#]", "", etic).strip().lower()
+            if etic == "articolo":
+                continue
+            out.append(SEZIONI[etic] if etic in SEZIONI else f"{m.group(1)} {m.group(2)}")
+            continue
+        out.append(ln)
+    return "\n".join(out).strip()
+
+
 def extract_json(text):
     """Estrae il JSON utile dall'output LLM, anche se il modello 'ragiona'.
     Scansiona tutti i gruppi bilanciati e preferisce l'array di oggetti."""
