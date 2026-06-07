@@ -54,23 +54,33 @@ def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=2):
 
 
 def extract_json(text):
-    """Estrae il primo array/oggetto JSON dal testo (ignora il 'ragionamento')."""
+    """Estrae il JSON utile dall'output LLM, anche se il modello 'ragiona'.
+    Scansiona tutti i gruppi bilanciati e preferisce l'array di oggetti."""
     text = re.sub(r"```(?:json)?", "", text)
+    cands = []
     for open_c, close_c in (("[", "]"), ("{", "}")):
-        i = text.find(open_c)
-        if i == -1:
-            continue
-        depth = 0
-        for j in range(i, len(text)):
-            if text[j] == open_c:
-                depth += 1
-            elif text[j] == close_c:
-                depth -= 1
-                if depth == 0:
-                    try:
-                        return json.loads(text[i:j + 1])
-                    except Exception:
+        for m in re.finditer(re.escape(open_c), text):
+            i, depth = m.start(), 0
+            for j in range(i, len(text)):
+                if text[j] == open_c:
+                    depth += 1
+                elif text[j] == close_c:
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            cands.append(json.loads(text[i:j + 1]))
+                        except Exception:
+                            pass
                         break
+    liste = [c for c in cands if isinstance(c, list) and c
+             and all(isinstance(x, dict) for x in c)]
+    if liste:
+        return max(liste, key=len)
+    dicts = [c for c in cands if isinstance(c, dict)]
+    if dicts:
+        return max(dicts, key=lambda d: len(json.dumps(d)))
+    if cands:
+        return cands[-1]
     raise ValueError("nessun JSON valido trovato nell'output LLM")
 
 

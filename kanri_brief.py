@@ -7,7 +7,6 @@ Sostituisce la "ricerca delle 07:00" basata su NotebookLM.
 """
 
 import os
-import json
 from datetime import date
 from pathlib import Path
 
@@ -61,7 +60,7 @@ def main():
     today = date.today().isoformat()
     feeds = Path(__file__).parent / "kanri_feeds.txt"
 
-    items = ke.fetch_rss_items(str(feeds), max_age_days=2, per_feed=6)
+    items = ke.fetch_rss_items(str(feeds), max_age_days=4, per_feed=8)
     print(f"RSS: {len(items)} news raccolte", flush=True)
     if not items:
         raise SystemExit("nessuna news dai feed")
@@ -76,6 +75,8 @@ def main():
     # costruisci gli item per Notion + il corpo email
     notizie, righe_md = [], ["# Brief KANRI — " + today, ""]
     for s in scelte:
+        if not isinstance(s, dict):
+            continue
         idx = s.get("idx")
         src = items[idx] if isinstance(idx, int) and 0 <= idx < len(items) else {}
         cat = notion_sync.normalizza_categoria(s.get("categoria", ""))
