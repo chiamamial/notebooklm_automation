@@ -239,7 +239,7 @@ Resend. Per inviare ad altri indirizzi: verificare un dominio su Resend
 ## 9. Cruscotto Notion
 
 Oltre all'email, ogni news del brief finisce come **riga** in un database Notion
-("Radar News"). Spuntando la casella **✅ Scrivi articolo**, il sistema genera
+("Kanri — Redazione"). Spuntando la casella **✅ Scrivi articolo**, il sistema genera
 un articolo completo (articolo + SEO + social + immagini) e lo scrive **dentro
 la pagina Notion**, mettendo poi **Stato = Fatto**.
 

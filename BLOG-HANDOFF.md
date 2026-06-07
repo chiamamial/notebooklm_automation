@@ -9,7 +9,7 @@
 ## 1. Architettura
 
 ```
-Notion (database "Radar News")  =  il CMS / fonte dei contenuti
+Notion (database "Kanri — Redazione")  =  il CMS / fonte dei contenuti
         ↓  (Notion API, a build time)
 Sito statico (Next.js)  →  deploy su Vercel
 ```
@@ -32,7 +32,7 @@ Sito statico (Next.js)  →  deploy su Vercel
 Libreria consigliata: `@notionhq/client`. Per convertire il corpo pagina in
 Markdown/HTML: `notion-to-md` (oppure rendering manuale dei blocchi).
 
-## 3. Schema del database "Radar News"
+## 3. Schema del database "Kanri — Redazione"
 
 Proprietà attuali di ogni riga:
 

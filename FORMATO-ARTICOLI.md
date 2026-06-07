@@ -2,7 +2,7 @@
 
 > Documento da fornire all'assistente AI che scrive gli articoli.
 > KANRI è una **rivista indipendente di arte, design e cultura visiva** (lingua: italiano).
-> Ogni articolo è una **riga** di un database Notion ("Radar News"). Il **testo dell'articolo
+> Ogni articolo è una **riga** di un database Notion ("Kanri — Redazione"). Il **testo dell'articolo
 > va scritto nel corpo della pagina** Notion della riga (non in una proprietà).
 > Un sito web legge automaticamente Notion e pubblica gli articoli: **rispetta il formato
 > esatto qui sotto**, altrimenti la resa sul sito sarà sbagliata.
