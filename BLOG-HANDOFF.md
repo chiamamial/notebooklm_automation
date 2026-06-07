@@ -1,4 +1,4 @@
-# Handoff — Sito/Blog "mire" alimentato da Notion
+# Handoff — Sito/Blog "Kanri" alimentato da Notion
 
 > Documento per l'assistente che costruirà il sito. Spiega **da dove prendere i
 > contenuti** e come renderizzarli. La fonte dei contenuti è un **database
@@ -122,5 +122,5 @@ estratto da `Di cosa parla`).
 - Il sito deve essere **sola lettura** verso Notion (non scrive nulla).
 - Categorie disponibili: vedere l'elenco nello schema (sezione 3).
 - Lingua dei contenuti: italiano.
-- Identità "mire": magazine di arte, design e cultura visiva.
+- Identità "Kanri": magazine di arte, design e cultura visiva.
 ```
