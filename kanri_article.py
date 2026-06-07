@@ -21,8 +21,8 @@ SYSTEM = (
 
 
 def genera_articolo(titolo, contesto="", n_fonti=5):
-    # 1. trova le fonti
-    query = f"{titolo} {contesto}".strip()
+    # 1. trova le fonti (query corta: Tavily limita a ~400 caratteri)
+    query = " ".join(f"{titolo} {contesto}".split())[:350]
     risultati = ke.tavily_search(query, max_results=n_fonti + 2)
 
     # 2. scarica il testo pulito di ognuna
