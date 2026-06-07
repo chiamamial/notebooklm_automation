@@ -1,0 +1,26 @@
+# Feed RSS nativi per KANRI (US / JP / EU, no Italia). Uno per riga, # = commento.
+
+# --- Design / oggetti / materia ---
+https://www.dezeen.com/feed/
+https://www.core77.com/feed
+https://www.creativereview.co.uk/feed/
+https://www.printmag.com/feed/
+https://www.slanted.de/feed/
+
+# --- Fotografia / visual / arte ---
+https://www.ignant.com/feed/
+https://www.booooooom.com/feed/
+https://petapixel.com/feed/
+https://hyperallergic.com/feed/
+https://www.thisiscolossal.com/feed/
+https://trendland.com/feed/
+
+# --- Giappone ---
+https://www.spoon-tamago.com/feed/
+https://pingmag.jp/feed/
+
+# --- Musica elettronica / sound design ---
+https://www.attackmagazine.com/feed/
+https://cdm.link/feed/
+https://xlr8r.com/feed/
+https://daily.bandcamp.com/feed

@@ -2,3 +2,4 @@
 # operazioni vanno via HTTP usando i cookie in NOTEBOOKLM_AUTH_JSON.
 # Playwright serve solo per il `notebooklm login` iniziale, che fai in locale.
 notebooklm-py>=0.6.0
+feedparser>=6.0
