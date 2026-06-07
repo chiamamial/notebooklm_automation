@@ -20,10 +20,19 @@ import urllib.error
 API = "https://api.notion.com/v1"
 VERSION = "2022-06-28"
 
-ALLOWED_CATS = {
-    "Arte", "Arte visiva", "Product design", "Graphic design",
-    "UI-UX design", "Architettura", "Musica", "Fotografia", "Cultura visiva",
-}
+ALLOWED_CATS = [
+    "BULBOUS / MATERIAL", "LO-FI UI / LAYOUT", "RAW FRAME / VISUAL",
+    "4/4 LOOP / AUDIO", "DESIGN MASTERS / ARCHIVE",
+]
+# match robusto: chiave senza spazi/punteggiatura -> nome esatto
+_CAT_MAP = {re.sub(r"[^a-z0-9]", "", c.lower()): c for c in ALLOWED_CATS}
+
+
+def normalizza_categoria(testo):
+    """Riconosce la categoria anche con maiuscole/spazi/slash diversi."""
+    if not testo:
+        return None
+    return _CAT_MAP.get(re.sub(r"[^a-z0-9]", "", testo.lower()))
 
 
 def _req(method, path, token, payload=None):
@@ -94,7 +103,7 @@ def parse_news(md):
         items.append({
             "title": title[:200],
             "summary": summary[:1900],
-            "categoria": categoria if categoria in ALLOWED_CATS else None,
+            "categoria": normalizza_categoria(categoria),
             "fonte": fonte[:1900],
         })
     return items

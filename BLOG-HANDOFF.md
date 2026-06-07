@@ -39,7 +39,7 @@ Proprietà attuali di ogni riga:
 | Proprietà | Tipo | Contenuto |
 |-----------|------|-----------|
 | `Notizia` | title | Titolo della news/articolo |
-| `Categoria` | select | Arte / Arte visiva / Product design / Graphic design / UI-UX design / Architettura / Musica / Fotografia / Cultura visiva |
+| `Categoria` | select | BULBOUS / MATERIAL · LO-FI UI / LAYOUT · RAW FRAME / VISUAL · 4/4 LOOP / AUDIO · DESIGN MASTERS / ARCHIVE |
 | `Di cosa parla` | rich_text | Riassunto breve (ottimo come **estratto/anteprima**) |
 | `Fonte` | rich_text | Titolo fonte + eventuale link |
 | `Scrivi articolo` | checkbox | (uso interno: innesca la scrittura dell'articolo) |
