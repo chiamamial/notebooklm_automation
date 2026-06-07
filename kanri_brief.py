@@ -68,7 +68,7 @@ def main():
     out = ke.openrouter_chat(
         [{"role": "system", "content": SYSTEM},
          {"role": "user", "content": costruisci_prompt(items)}],
-        max_tokens=4000, temperature=0.5)
+        max_tokens=8000, temperature=0.5)
     scelte = ke.extract_json(out)
     print(f"LLM: {len(scelte)} news selezionate", flush=True)
 
