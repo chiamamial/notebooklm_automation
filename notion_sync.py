@@ -45,30 +45,51 @@ def _req(method, path, token, payload=None):
 
 # ---------- parsing del brief ----------
 
+_META = ("idee per titoli", "sul radar", "brief editoriale", "indice",
+         "sommario", "panoramica")
+
+
 def parse_news(md):
-    """Estrae le schede-news dal brief markdown."""
+    """Estrae le schede-news dal brief markdown. Tollerante alle variazioni
+    di formato di NotebookLM (etichette mancanti, livelli di heading diversi)."""
     items = []
-    headings = list(re.finditer(r"(?m)^(#{2,3})\s+(.+)$", md))
+    headings = list(re.finditer(r"(?m)^(#{1,6})\s+(.+)$", md))
     for i, h in enumerate(headings):
+        level = len(h.group(1))
         title = h.group(2).strip().strip("*").strip()
         low = title.lower()
-        if title.startswith(("💡", "📡")) or "idee per titoli" in low or "sul radar" in low:
+        # salta sezioni meta e il titolo-documento (primo heading di livello 1)
+        if title.startswith(("💡", "📡")) or any(k in low for k in _META):
+            continue
+        if i == 0 and level == 1:
             continue
         start = h.end()
         end = headings[i + 1].start() if i + 1 < len(headings) else len(md)
         body = md[start:end]
 
-        def field(label):
-            m = re.search(r"\*\*\s*" + label + r"\s*:\*\*\s*(.+?)(?=\n\s*[-*]\s*\*\*|\Z)",
-                          body, re.S | re.I)
-            if not m:
-                m = re.search(label + r"\s*:\s*(.+?)(?=\n\s*[-*]|\Z)", body, re.S | re.I)
-            return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+        def field(*labels):
+            for label in labels:
+                m = re.search(r"\*\*\s*" + label + r"\s*:?\s*\*\*\s*:?\s*(.+?)"
+                              r"(?=\n\s*[-*]\s*\*\*|\n#|\Z)", body, re.S | re.I)
+                if not m:
+                    m = re.search(label + r"\s*:\s*(.+?)(?=\n\s*[-*]|\n#|\Z)",
+                                  body, re.S | re.I)
+                if m:
+                    return re.sub(r"\s+", " ", m.group(1)).strip()
+            return ""
 
-        summary = field("Di cosa parla")
+        summary = field("Di cosa parla", "In breve", "Perché pubblicarlo")
         categoria = field("Categoria").rstrip(".").strip()
-        fonte = field("Fonte")
-        if not (categoria or fonte):
+        fonte = field("Fonte", "Fonti")
+        # fallback: se manca il riassunto, usa il primo paragrafo della sezione
+        if not summary:
+            for para in re.split(r"\n\s*\n", body.strip()):
+                p = re.sub(r"\s+", " ", re.sub(r"^[-*]\s*", "", para)).strip()
+                if len(p) > 40 and not p.lower().startswith(("categoria", "fonte", "perché")):
+                    summary = p
+                    break
+        # è una news solo se ha almeno un contenuto utile
+        if not (summary or categoria or fonte):
             continue
         items.append({
             "title": title[:200],
@@ -81,9 +102,27 @@ def parse_news(md):
 
 # ---------- scrittura righe ----------
 
+def _titoli_esistenti(token, db_id, day):
+    """Titoli gia' presenti nel database per quel giorno (anti-duplicati)."""
+    try:
+        res = _req("POST", f"/databases/{db_id}/query", token,
+                   {"filter": {"property": "Data", "date": {"equals": day}}, "page_size": 100})
+    except Exception:
+        return set()
+    out = set()
+    for p in res.get("results", []):
+        t = "".join(x.get("plain_text", "") for x in p["properties"]["Notizia"]["title"])
+        out.add(t.strip())
+    return out
+
+
 def add_news_rows(token, db_id, items, day):
+    esistenti = _titoli_esistenti(token, db_id, day)
     created = 0
     for it in items:
+        if it["title"].strip() in esistenti:
+            continue  # gia' presente oggi: salta il doppione
+        esistenti.add(it["title"].strip())
         props = {
             "Notizia": {"title": [{"text": {"content": it["title"]}}]},
             "Di cosa parla": {"rich_text": [{"text": {"content": it["summary"]}}]},
