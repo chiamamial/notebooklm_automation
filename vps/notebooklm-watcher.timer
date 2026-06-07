@@ -2,8 +2,8 @@
 Description=Controlla Notion ogni 5 minuti per le news spuntate
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=5min
+OnBootSec=1min
+OnUnitActiveSec=1min
 Persistent=true
 
 [Install]
