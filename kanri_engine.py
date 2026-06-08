@@ -35,11 +35,11 @@ def _post(url, payload, headers, timeout=120):
 
 # Modelli free di riserva (provati in ordine se quello primario fallisce)
 FALLBACK_MODELS = [
-    "nvidia/nemotron-3-super-120b-a12b:free",
     "openai/gpt-oss-120b:free",
+    "z-ai/glm-4.5-air:free",
     "qwen/qwen3-next-80b-a3b-instruct:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "z-ai/glm-4.5-air:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
 ]
 
 
