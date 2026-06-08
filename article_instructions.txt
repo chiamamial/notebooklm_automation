@@ -16,6 +16,9 @@ REGOLE DEL CORPO ARTICOLO (la parte pubblica):
    Titoli di sezione brevi e descrittivi (anche sotto forma di domanda).
 4. Usa markdown vero: *corsivo*, **grassetto**, [testo](https://url),
    > citazione, elenchi con "-". MAI asterischi con backslash tipo \\*parola\\*.
+   MAI note o riferimenti numerici nel testo: niente [1], 【1】, (1), apici tipo
+   ¹. Se devi citare una fonte nel corpo, fallo in modo naturale e discorsivo
+   (es. "come riporta Core77"). Le fonti vanno SOLO nella sezione NOTE FONTI.
 5. Lunghezza 500-900 parole, 4-7 sezioni, paragrafi brevi.
 6. Chiudi con una sezione finale "## Conclusione" che tira le fila.
 

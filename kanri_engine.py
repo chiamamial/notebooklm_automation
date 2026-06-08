@@ -89,6 +89,12 @@ def pulisci(md):
     """Forza il formato KANRI sull'output LLM (toglie titolo, denumera sezioni,
     pulisce escape e righe-artefatto)."""
     md = md.replace("\\*", "*").replace("\\_", "_")
+    # togli marcatori di citazione: [1] 【1】 [1,2] [1-3]  e  (1)/(12) ma NON gli anni (2026)
+    md = re.sub(r"[【\[]\s*\d+(?:\s*[,–-]\s*\d+)*\s*[】\]]", "", md)
+    md = re.sub(r"\(\s*\d{1,2}\s*\)", "", md)
+    md = re.sub(r"[¹²³⁰-⁹]+", "", md)  # apici ¹²³
+    md = re.sub(r"[ \t]+([.,;:!?])", r"\1", md)  # spazi prima della punteggiatura
+    md = re.sub(r"(?<=\S) {2,}(?=\S)", " ", md)  # doppi spazi rimasti dopo le rimozioni
     SEZIONI = {"seo": "## SEO", "social": "## SOCIAL",
                "immagini": "## IMMAGINI", "note fonti": "## NOTE FONTI"}
     out, titolo_rimosso = [], False
