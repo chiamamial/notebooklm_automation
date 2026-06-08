@@ -65,11 +65,10 @@ def main():
     if not items:
         raise SystemExit("nessuna news dai feed")
 
-    out = ke.openrouter_chat(
+    scelte = ke.llm_json(
         [{"role": "system", "content": SYSTEM},
          {"role": "user", "content": costruisci_prompt(items)}],
         max_tokens=8000, temperature=0.5)
-    scelte = ke.extract_json(out)
     print(f"LLM: {len(scelte)} news selezionate", flush=True)
 
     # costruisci gli item per Notion + il corpo email

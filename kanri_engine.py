@@ -33,9 +33,19 @@ def _post(url, payload, headers, timeout=120):
 
 # ---------- OpenRouter ----------
 
-def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=2):
+# Modelli free di riserva (provati in ordine se quello primario fallisce)
+FALLBACK_MODELS = [
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "openai/gpt-oss-120b:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "z-ai/glm-4.5-air:free",
+]
+
+
+def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=1, model=None):
     key = os.environ["OPENROUTER_API_KEY"]
-    model = os.environ.get("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
+    model = model or os.environ.get("OPENROUTER_MODEL", FALLBACK_MODELS[0])
     payload = {"model": model, "messages": messages,
                "max_tokens": max_tokens, "temperature": temperature}
     headers = {"Authorization": f"Bearer {key}", "X-Title": "KANRI"}
@@ -43,14 +53,36 @@ def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=2):
     for attempt in range(retries + 1):
         try:
             d = _post("https://openrouter.ai/api/v1/chat/completions", payload, headers, 180)
-            return d["choices"][0]["message"]["content"]
+            txt = d.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if txt and txt.strip():
+                return txt
+            last = "risposta vuota"
         except urllib.error.HTTPError as e:
-            last = f"{e.code}: {e.read().decode()[:200]}"
+            last = f"{e.code}: {e.read().decode()[:160]}"
         except Exception as e:
-            last = repr(e)[:200]
+            last = repr(e)[:160]
         if attempt < retries:
-            time.sleep(20)
-    raise RuntimeError(f"OpenRouter fallito: {last}")
+            time.sleep(15)
+    raise RuntimeError(f"OpenRouter ({model}) fallito: {last}")
+
+
+def llm_json(messages, max_tokens=8000, temperature=0.4):
+    """Ottiene un JSON dall'LLM provando piu' modelli free finche' uno funziona."""
+    primary = os.environ.get("OPENROUTER_MODEL")
+    ordine = ([primary] if primary else []) + [m for m in FALLBACK_MODELS if m != primary]
+    last = ""
+    for model in ordine:
+        try:
+            out = openrouter_chat(messages, max_tokens, temperature, retries=1, model=model)
+            data = extract_json(out)
+            if data:
+                print(f"  (modello usato: {model})", flush=True)
+                return data
+            last = f"{model}: JSON vuoto"
+        except Exception as e:
+            last = f"{model}: {repr(e)[:100]}"
+            print(f"  (scarto {model}: {last})", flush=True)
+    raise RuntimeError(f"tutti i modelli falliti -> {last}")
 
 
 def pulisci(md):
