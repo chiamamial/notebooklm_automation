@@ -62,8 +62,15 @@ def main():
 
     items = ke.fetch_rss_items(str(feeds), max_age_days=4, per_feed=8)
     print(f"RSS: {len(items)} news raccolte", flush=True)
+
+    # anti-ripetizione: scarta le news gia' coperte negli ultimi 7 giorni
+    nt, ndb = os.environ.get("NOTION_TOKEN"), os.environ.get("NOTION_DB_ID")
+    if nt and ndb:
+        coperti = notion_sync.urls_coperti(nt, ndb, days=7)
+        items = [it for it in items if it["url"].rstrip("/") not in coperti]
+        print(f"  dopo anti-ripetizione: {len(items)} news nuove ({len(coperti)} gia' coperte)", flush=True)
     if not items:
-        raise SystemExit("nessuna news dai feed")
+        raise SystemExit("nessuna news nuova dai feed")
 
     scelte = ke.llm_json(
         [{"role": "system", "content": SYSTEM},

@@ -155,14 +155,25 @@ def tavily_search(query, max_results=6, days=14):
 # ---------- Firecrawl ----------
 
 def firecrawl_scrape(url, timeout=120):
+    return firecrawl_scrape_meta(url, timeout)[0]
+
+
+def firecrawl_scrape_meta(url, timeout=120):
+    """Ritorna (markdown, immagine_copertina) per una pagina."""
     key = os.environ["FIRECRAWL_API_KEY"]
     try:
         d = _post("https://api.firecrawl.dev/v1/scrape",
                   {"url": url, "formats": ["markdown"], "onlyMainContent": True},
                   {"Authorization": f"Bearer {key}"}, timeout)
-        return (d.get("data", {}) or {}).get("markdown", "") or ""
+        data = d.get("data", {}) or {}
+        meta = data.get("metadata", {}) or {}
+        cover = (meta.get("ogImage") or meta.get("og:image")
+                 or meta.get("twitter:image") or meta.get("image") or "")
+        if isinstance(cover, list):
+            cover = cover[0] if cover else ""
+        return data.get("markdown", "") or "", cover or ""
     except Exception:
-        return ""
+        return "", ""
 
 
 # ---------- RSS ----------

@@ -168,6 +168,33 @@ def find_checked(token, db_id):
     return out
 
 
+def urls_coperti(token, db_id, days=7):
+    """URL delle fonti gia' presenti negli ultimi `days` giorni (anti-ripetizione)."""
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=days)).isoformat()
+    urls, cur = set(), None
+    while True:
+        payload = {"filter": {"property": "Data", "date": {"on_or_after": since}},
+                   "page_size": 100}
+        if cur:
+            payload["start_cursor"] = cur
+        res = _req("POST", f"/databases/{db_id}/query", token, payload)
+        for p in res.get("results", []):
+            fonte = "".join(t.get("plain_text", "") for t in p["properties"]["Fonte"]["rich_text"])
+            m = re.search(r"https?://\S+", fonte)
+            if m:
+                urls.add(m.group(0).rstrip(").,").rstrip("/"))
+        if not res.get("has_more"):
+            break
+        cur = res["next_cursor"]
+    return urls
+
+
+def set_cover(token, page_id, url):
+    _req("PATCH", f"/pages/{page_id}", token,
+         {"properties": {"Copertina": {"url": url}}})
+
+
 def set_status(token, page_id, status):
     _req("PATCH", f"/pages/{page_id}", token,
          {"properties": {"Stato": {"select": {"name": status}}}})

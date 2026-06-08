@@ -35,10 +35,11 @@ def _titolo_da_md(md):
 def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
     fonti = []
     seed = titolo
+    cover = ""
 
-    # 1. ANCORA: leggi la fonte originale (sicura al 100% sul tema)
+    # 1. ANCORA: leggi la fonte originale (sicura al 100% sul tema) + copertina
     if fonte_url:
-        md = ke.firecrawl_scrape(fonte_url)
+        md, cover = ke.firecrawl_scrape_meta(fonte_url)
         if md and len(md) > 400:
             t0 = _titolo_da_md(md) or titolo
             seed = t0
@@ -84,9 +85,11 @@ def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
     out = ke.openrouter_chat(
         [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
         max_tokens=8000, temperature=0.6)
-    return ke.pulisci(out)
+    return ke.pulisci(out), cover
 
 
 if __name__ == "__main__":
     topic = " ".join(sys.argv[1:]).strip() or "Gustaf Westman x Nike ceramica scultorea"
-    print(genera_articolo(topic))
+    body, cover = genera_articolo(topic)
+    print("COPERTINA:", cover, "\n")
+    print(body)
