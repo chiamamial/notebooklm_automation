@@ -161,7 +161,10 @@ def find_checked(token, db_id):
         props = p["properties"]
         title = "".join(t.get("plain_text", "") for t in props["Notizia"]["title"])
         summary = "".join(t.get("plain_text", "") for t in props["Di cosa parla"]["rich_text"])
-        out.append({"page_id": p["id"], "title": title, "summary": summary})
+        fonte = "".join(t.get("plain_text", "") for t in props["Fonte"]["rich_text"])
+        m = re.search(r"https?://\S+", fonte)
+        out.append({"page_id": p["id"], "title": title, "summary": summary,
+                    "fonte_url": m.group(0).rstrip(").,") if m else ""})
     return out
 
 

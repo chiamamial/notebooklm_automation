@@ -30,7 +30,7 @@ def main():
         print(f"→ Approfondisco: {r['title'][:60]}", flush=True)
         notion_sync.set_status(token, r["page_id"], "In corso")
         try:
-            body = genera_articolo(r["title"], r.get("summary", ""))
+            body = genera_articolo(r["title"], r.get("summary", ""), r.get("fonte_url", ""))
             notion_sync.append_markdown(token, r["page_id"], body)
             notion_sync.uncheck(token, r["page_id"])
             notion_sync.set_status(token, r["page_id"], "Fatto")
