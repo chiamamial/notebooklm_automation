@@ -66,6 +66,26 @@ def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=1, model
     raise RuntimeError(f"OpenRouter ({model}) fallito: {last}")
 
 
+def alert(subject, text):
+    """Manda un avviso via email (Resend). Usato quando qualcosa fallisce."""
+    key = os.environ.get("RESEND_API_KEY")
+    to = os.environ.get("MAIL_TO")
+    if not key or not to:
+        return
+    sender = os.environ.get("MAIL_FROM", "onboarding@resend.dev")
+    payload = {"from": sender, "to": [to], "subject": subject,
+               "html": f"<pre style='font-family:sans-serif;white-space:pre-wrap'>{text}</pre>"}
+    req = urllib.request.Request(
+        "https://api.resend.com/emails", data=json.dumps(payload).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                 "User-Agent": "kanri/1.0"}, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=20)
+        print("  (avviso email inviato)", flush=True)
+    except Exception:
+        pass
+
+
 def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None):
     """Genera testo con l'API Gemini (Google AI Studio)."""
     key = os.environ["GEMINI_API_KEY"]

@@ -119,4 +119,21 @@ def _scrivi_file(today, body):
 
 
 if __name__ == "__main__":
-    main()
+    import time
+    import traceback
+    from datetime import date as _date
+    for _tentativo in range(2):
+        try:
+            main()
+            break
+        except SystemExit:
+            raise  # "nessuna news nuova" non è un errore: non avvisare
+        except Exception:
+            if _tentativo == 0:
+                print("Brief fallito, riprovo tra 120s...", flush=True)
+                time.sleep(120)
+                continue
+            ke.alert(f"⚠️ Brief KANRI FALLITO — {_date.today().isoformat()}",
+                     "Il brief di oggi non è stato generato dopo 2 tentativi.\n\n"
+                     + traceback.format_exc())
+            raise
