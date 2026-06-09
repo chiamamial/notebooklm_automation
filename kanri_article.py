@@ -68,15 +68,24 @@ def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
 
     # 3. sintesi
     formato = (Path(__file__).parent / "article_instructions.txt").read_text(encoding="utf-8")
+    has_orig = bool(fonte_url and fonti and fonti[0]["url"] == fonte_url)
     blocchi = "\n\n".join(
-        f'### FONTE {i+1}: {f["title"]}\nURL: {f["url"]}\n{f["text"]}'
+        f'### FONTE {i+1}{" (ORIGINALE — da cui nasce la notizia)" if (i == 0 and has_orig) else ""}: '
+        f'{f["title"]}\nURL: {f["url"]}\n{f["text"]}'
         for i, f in enumerate(fonti))
+    nota_orig = (
+        "\nLa FONTE 1 è l'ORIGINALE. Valuta: se è un contenuto esclusivo di quella "
+        "testata (intervista, profilo d'autore, reportage, scoop), ATTRIBUISCILA nel "
+        "corpo con il nome della testata come link inline all'originale (vedi regola "
+        "'TRASPARENZA E ATTRIBUZIONE'). Se invece le altre fonti riportano lo stesso "
+        "fatto in modo equivalente, è notizia generale: niente attribuzione singola.\n"
+    ) if has_orig else ""
     user = (
         f"ARGOMENTO (la notizia da approfondire): {titolo}\n"
         f"{('CONTESTO: ' + contesto) if contesto else ''}\n\n"
         f"Qui sotto {len(fonti)} fonti (testo grezzo). DOVREBBERO riguardare tutte "
         f"la STESSA notizia. Se una fonte NON è pertinente all'argomento qui sopra, "
-        f"IGNORALA del tutto.\n\n{blocchi}\n\n"
+        f"IGNORALA del tutto.\n\n{blocchi}\n{nota_orig}\n"
         f"--- ISTRUZIONI DI FORMATO (rispettale alla lettera) ---\n{formato}\n\n"
         f"Scrivi UN SOLO articolo originale in italiano che SINTETIZZA le fonti "
         f"PERTINENTI (non copiarle), con angolo editoriale KANRI. Cita i fatti e, "
