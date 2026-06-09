@@ -27,6 +27,9 @@ REGOLE DEL CORPO ARTICOLO (la parte pubblica):
    forzato — nel PRIMO paragrafo (entro le prime ~50 parole), in almeno 2 titoli
    di sezione "##", e qua e là nel testo. Usa anche sinonimi e termini correlati
    (varietà semantica). Se ci sono "DATI E LINEE GUIDA SEO" qui sotto, seguili.
+   Se indicano DOMANDE FREQUENTI, RISPONDI a quelle domande DENTRO l'articolo, in
+   modo naturale nei paragrafi (puoi anche usarle come titoli di sezione). NON
+   creare MAI una sezione "FAQ" o blocchi di domande-e-risposte.
 8. LINK INTERNI: se ti vengono forniti "ARTICOLI CORRELATI", inserisci 2-3 link
    interni a quelli DAVVERO pertinenti, con il markdown esatto indicato. Se nessuno
    è pertinente, non metterne. NON inventare link interni non presenti nella lista.
@@ -45,21 +48,8 @@ TRASPARENZA E ATTRIBUZIONE (regola etica importante):
   e aggregato: in quel caso le fonti vanno solo in NOTE FONTI, senza dover deferire
   a una singola testata nel corpo.
 
-Subito DOPO la Conclusione, aggiungi una sezione FAQ (è PUBBLICA, va sul sito):
-
-## FAQ
-### <Domanda 1 reale che le persone cercano su questo tema?>
-<Risposta chiara di 2-3 frasi.>
-### <Domanda 2?>
-<Risposta.>
-### <Domanda 3?>
-<Risposta.>
-
-Basati sulle "DOMANDE FREQUENTI" delle linee guida SEO se presenti; altrimenti
-formula 3-4 domande reali e utili. Risposte concrete, niente fuffa.
-
-Poi inserisci ESATTAMENTE questa intestazione e queste 4 righe (etichette
-identiche, una riga per campo):
+Subito DOPO la Conclusione, inserisci ESATTAMENTE questa intestazione e queste 4
+righe (etichette identiche, una riga per campo):
 
 ## SEO
 - Titolo SEO: <max ~60 caratteri>
