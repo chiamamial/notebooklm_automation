@@ -10,10 +10,9 @@ così, quindi rispettalo alla lettera):
 REGOLE DEL CORPO ARTICOLO (la parte pubblica):
 1. NON scrivere il titolo. Niente "# Titolo", niente "Sommario:", niente
    "## ARTICOLO". Il titolo è gestito altrove.
-2. Il PRIMO blocco è un PARAGRAFO (non un heading): è l'attacco, e deve essere
-   NARRATIVO — apri con una scena, un dettaglio concreto, una tensione o
-   un'immagine che cattura. NON un riassunto piatto "chi/cosa/quando". Subito
-   dopo l'aggancio, orienta il lettore su cosa sta succedendo.
+2. Il PRIMO blocco è un PARAGRAFO (non un heading): un attacco diretto e concreto
+   che dice la notizia in modo chiaro e invitante (un buon "lead" giornalistico).
+   Niente scene teatrali, niente preamboli: il fatto, subito, scritto bene.
 3. Sezioni con "##", eventuali sottosezioni con "###". NON usare mai "#".
    Titoli di sezione brevi e descrittivi (anche sotto forma di domanda).
 4. Usa markdown vero: *corsivo*, **grassetto**, [testo](https://url),
@@ -78,18 +77,14 @@ Poi aggiungi queste sezioni di redazione (restano private, non pubblicate):
 - <fonte 1 con titolo e link>
 - <fonte 2 con titolo e link>
 
-VOCE KANRI (firma narrativa, stile longform):
-- Racconta, non riassumere. Usa dettagli concreti e sensoriali, scene, persone.
-- IMPORTANTE: la scena e i dettagli devono nascere da elementi REALI presenti
-  nelle fonti (un evento, un luogo, una persona, un oggetto, una dichiarazione
-  citati). NON inventare scene, luoghi, citazioni o dettagli non documentati: la
-  prosa è evocativa ma i fatti sono veri. Meglio un dettaglio reale e preciso che
-  uno inventato e suggestivo.
-- Costruisci un filo conduttore dall'attacco alla chiusura. La conclusione lasci
-  un'immagine o un pensiero che resta, non un riepilogo burocratico.
-- Hai un punto di vista: mostralo coi fatti, non con aggettivi gonfi.
-- Ritmo vario: frasi lunghe alternate a frasi brevi e secche per dare il colpo.
-- Metafore e analogie con parsimonia, solo se accendono qualcosa.
+VOCE KANRI (chiara, sobria, professionale):
+- Chiarezza prima di tutto: frasi pulite e dirette, niente giri di parole.
+- Concretezza: fatti, nomi, numeri, dettagli reali presi dalle fonti. Mai
+  inventare scene, luoghi, citazioni o dettagli non documentati.
+- Sostanza, non decorazione: l'articolo è interessante per ciò che dice, non per
+  come lo infiocchetta. Aggettivi col contagocce.
+- Niente prosa "poetica", niente metafore forzate, niente enfasi da trailer.
+- Un punto di vista è ammesso, ma misurato e basato sui fatti.
 
 LISTA NERA — NON usare MAI queste formule da cliché/comunicato stampa (né loro
 varianti): "in un panorama in (costante/continua) evoluzione", "nel mondo
