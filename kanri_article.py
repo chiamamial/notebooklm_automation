@@ -74,11 +74,13 @@ def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
         f'{f["title"]}\nURL: {f["url"]}\n{f["text"]}'
         for i, f in enumerate(fonti))
     nota_orig = (
-        "\nLa FONTE 1 è l'ORIGINALE. Valuta: se è un contenuto esclusivo di quella "
-        "testata (intervista, profilo d'autore, reportage, scoop), ATTRIBUISCILA nel "
-        "corpo con il nome della testata come link inline all'originale (vedi regola "
-        "'TRASPARENZA E ATTRIBUZIONE'). Se invece le altre fonti riportano lo stesso "
-        "fatto in modo equivalente, è notizia generale: niente attribuzione singola.\n"
+        f"\nLa FONTE 1 è l'ORIGINALE. Valuta: se è un contenuto esclusivo di quella "
+        f"testata (intervista, profilo d'autore, reportage, scoop), ATTRIBUISCILA nel "
+        f"corpo. In tal caso il nome della testata DEVE essere un link markdown che "
+        f"punta ESATTAMENTE a questo URL: {fonte_url}\n"
+        f"Esempio: 'come racconta in un post per [Printmag]({fonte_url})'.\n"
+        f"Se invece le altre fonti riportano lo stesso fatto in modo equivalente, è "
+        f"notizia generale: niente attribuzione singola.\n"
     ) if has_orig else ""
     user = (
         f"ARGOMENTO (la notizia da approfondire): {titolo}\n"
