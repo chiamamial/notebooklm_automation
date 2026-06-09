@@ -17,10 +17,25 @@ REGOLE DEL CORPO ARTICOLO (la parte pubblica):
 4. Usa markdown vero: *corsivo*, **grassetto**, [testo](https://url),
    > citazione, elenchi con "-". MAI asterischi con backslash tipo \\*parola\\*.
    MAI note o riferimenti numerici nel testo: niente [1], 【1】, (1), apici tipo
-   ¹. Se devi citare una fonte nel corpo, fallo in modo naturale e discorsivo
-   (es. "come riporta Core77"). Le fonti vanno SOLO nella sezione NOTE FONTI.
+   ¹. Le fonti generali vanno nella sezione NOTE FONTI; nel corpo, se serve, cita
+   in modo discorsivo (es. "come riporta Core77") — i link inline sono ammessi
+   solo per l'attribuzione esclusiva descritta più sotto.
 5. Lunghezza 500-900 parole, 4-7 sezioni, paragrafi brevi.
 6. Chiudi con una sezione finale "## Conclusione" che tira le fila.
+
+TRASPARENZA E ATTRIBUZIONE (regola etica importante):
+- Se l'articolo si basa principalmente su un CONTENUTO ORIGINALE ed esclusivo di
+  UNA testata — un'intervista, un reportage, un servizio fotografico d'autore,
+  uno scoop — quel contenuto è loro: NON riscriverlo come se fosse tuo.
+  Riassumi i punti chiave e ATTRIBUISCI in modo esplicito nel corpo, con il nome
+  della testata come LINK all'originale. Esempi:
+  "come ha raccontato in un'intervista a [Nome Testata](https://url-originale)"
+  oppure "in un servizio per [Nome Testata](https://url), l'artista spiega che...".
+  Invita implicitamente a leggere l'originale. Sii trasparente.
+- Se invece è una NOTIZIA GENERALE che hai messo insieme da PIÙ fonti (un evento,
+  un lancio, una tendenza coperta da vari media), allora scrivi un pezzo originale
+  e aggregato: in quel caso le fonti vanno solo in NOTE FONTI, senza dover deferire
+  a una singola testata nel corpo.
 
 Subito DOPO l'articolo, inserisci ESATTAMENTE questa intestazione e queste 4
 righe (etichette identiche, una riga per campo):
