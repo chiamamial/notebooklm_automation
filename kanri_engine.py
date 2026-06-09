@@ -66,6 +66,39 @@ def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=1, model
     raise RuntimeError(f"OpenRouter ({model}) fallito: {last}")
 
 
+def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None):
+    """Genera testo con l'API Gemini (Google AI Studio)."""
+    key = os.environ["GEMINI_API_KEY"]
+    model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+           f"{model}:generateContent?key={key}")
+    payload = {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": [{"text": user}]}],
+        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
+    }
+    d = _post(url, payload, {}, 180)
+    cands = d.get("candidates", [])
+    if not cands:
+        raise RuntimeError(f"Gemini: nessuna risposta ({str(d)[:200]})")
+    parts = cands[0].get("content", {}).get("parts", [])
+    return "".join(p.get("text", "") for p in parts)
+
+
+def article_llm(system, user, max_tokens=8000, temperature=0.6):
+    """Scrive l'articolo: usa Gemini se la chiave c'e', altrimenti OpenRouter."""
+    if os.environ.get("GEMINI_API_KEY"):
+        try:
+            txt = gemini_chat(system, user, max_tokens, temperature)
+            if txt and txt.strip():
+                return txt
+        except Exception as e:
+            print(f"  (Gemini fallito, uso OpenRouter: {repr(e)[:120]})", flush=True)
+    return openrouter_chat(
+        [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        max_tokens, temperature)
+
+
 def llm_json(messages, max_tokens=8000, temperature=0.4):
     """Ottiene un JSON dall'LLM provando piu' modelli free finche' uno funziona."""
     primary = os.environ.get("OPENROUTER_MODEL")

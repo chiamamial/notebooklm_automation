@@ -82,9 +82,7 @@ def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
         f"PERTINENTI (non copiarle), con angolo editoriale KANRI. Cita i fatti e, "
         f"nella sezione NOTE FONTI, elenca SOLO le fonti realmente usate (titolo + link)."
     )
-    out = ke.openrouter_chat(
-        [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
-        max_tokens=8000, temperature=0.6)
+    out = ke.article_llm(SYSTEM, user, max_tokens=8000, temperature=0.6)
     return ke.pulisci(out), cover
 
 
