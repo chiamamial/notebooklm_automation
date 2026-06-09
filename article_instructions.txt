@@ -80,6 +80,11 @@ Poi aggiungi queste sezioni di redazione (restano private, non pubblicate):
 
 VOCE KANRI (firma narrativa, stile longform):
 - Racconta, non riassumere. Usa dettagli concreti e sensoriali, scene, persone.
+- IMPORTANTE: la scena e i dettagli devono nascere da elementi REALI presenti
+  nelle fonti (un evento, un luogo, una persona, un oggetto, una dichiarazione
+  citati). NON inventare scene, luoghi, citazioni o dettagli non documentati: la
+  prosa è evocativa ma i fatti sono veri. Meglio un dettaglio reale e preciso che
+  uno inventato e suggestivo.
 - Costruisci un filo conduttore dall'attacco alla chiusura. La conclusione lasci
   un'immagine o un pensiero che resta, non un riepilogo burocratico.
 - Hai un punto di vista: mostralo coi fatti, non con aggettivi gonfi.
