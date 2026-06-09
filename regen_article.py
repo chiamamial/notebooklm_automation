@@ -21,8 +21,10 @@ summary = "".join(x["plain_text"] for x in p["Di cosa parla"]["rich_text"])
 fonte = "".join(x["plain_text"] for x in p["Fonte"]["rich_text"])
 m = re.search(r"https?://\S+", fonte)
 furl = m.group(0).rstrip(").,") if m else ""
+catp = p.get("Categoria", {}).get("select")
+cat = catp["name"] if catp else ""
 
-body, cover = genera_articolo(title, summary, furl)
+body, cover, slug = genera_articolo(title, summary, furl, categoria=cat, exclude_id=PID)
 
 # svuota i blocchi esistenti
 children, cur = [], None
@@ -39,5 +41,7 @@ for b in children:
 notion_sync.append_markdown(TOK, PID, body)
 if cover:
     notion_sync.set_cover(TOK, PID, cover)
+if slug:
+    notion_sync.set_slug(TOK, PID, slug)
 notion_sync.set_status(TOK, PID, "Fatto")
-print(f"rigenerato: {title[:40]} | vecchi blocchi rimossi: {len(children)} | cover: {bool(cover)}")
+print(f"rigenerato: {title[:40]} | blocchi: {len(children)} | cover: {bool(cover)} | slug: {slug}")

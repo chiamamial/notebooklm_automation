@@ -9,10 +9,13 @@ Funzione principale: genera_articolo(titolo, contesto) -> markdown
 Usata dal controllore Notion (notion_watcher.py).
 """
 
+import re
+import os
 import sys
 from pathlib import Path
 
 import kanri_engine as ke
+import notion_sync
 
 SYSTEM = (
     "Sei un giornalista-redattore di KANRI, rivista di cultura visiva e sonora. "
@@ -83,7 +86,21 @@ def esegui_ricerca_seo(titolo, contesto=""):
         return ""
 
 
-def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
+def estrai_slug(md):
+    m = re.search(r"(?im)^\s*[-*]?\s*\**\s*slug\s*url\s*\**\s*:\s*(.+?)\s*$", md)
+    if m:
+        s = re.sub(r"[^a-z0-9-]", "", m.group(1).strip().lower().replace(" ", "-"))
+        return s.strip("-")[:80]
+    return ""
+
+
+def _slugify(t):
+    import unicodedata
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", t.lower())).strip("-")[:80]
+
+
+def genera_articolo(titolo, contesto="", fonte_url="", categoria="", exclude_id="", n_fonti=5):
     # Esegui ricerca SEO preliminare
     print(f"→ Avvio analisi SEO per: {titolo}", flush=True)
     seo_report = esegui_ricerca_seo(titolo, contesto)
@@ -154,10 +171,26 @@ def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
             f"-------------------------------\n\n"
         )
 
+    # LINK INTERNI: candidati REALI (stessa categoria, gia' scritti). L'AI puo'
+    # linkare SOLO questi, e solo se pertinenti.
+    link_block = ""
+    nt, ndb = os.environ.get("NOTION_TOKEN"), os.environ.get("NOTION_DB_ID")
+    if nt and ndb and categoria:
+        correlati = notion_sync.articoli_correlati(nt, ndb, categoria, exclude_id, limit=6)
+        if correlati:
+            righe = "\n".join(f'- [{c["title"]}](/articolo/{c["slug"]})' for c in correlati)
+            link_block = (
+                "--- ARTICOLI CORRELATI (per i LINK INTERNI) ---\n"
+                "Questi sono articoli KANRI già pubblicati. Se — e SOLO se — uno è "
+                "davvero pertinente al tema, inserisci un link interno nel corpo usando "
+                "ESATTAMENTE il markdown qui sotto (max 2-3 link, in modo naturale). "
+                "Se nessuno è pertinente, NON metterne. NON inventare altri link interni.\n"
+                f"{righe}\n\n")
+
     user = (
         f"ARGOMENTO (la notizia da approfondire): {titolo}\n"
         f"{('CONTESTO: ' + contesto) if contesto else ''}\n\n"
-        f"{seo_instructions}"
+        f"{seo_instructions}{link_block}"
         f"Qui sotto {len(fonti)} fonti (testo grezzo). DOVREBBERO riguardare tutte "
         f"la STESSA notizia. Se una fonte NON è pertinente all'argomento qui sopra, "
         f"IGNORALA del tutto.\n\n{blocchi}\n{nota_orig}\n"
@@ -167,11 +200,13 @@ def genera_articolo(titolo, contesto="", fonte_url="", n_fonti=5):
         f"nella sezione NOTE FONTI, elenca SOLO le fonti realmente usate (titolo + link)."
     )
     out = ke.article_llm(SYSTEM, user, max_tokens=8000, temperature=0.6)
-    return ke.pulisci(out), cover
+    body = ke.pulisci(out)
+    slug = estrai_slug(body) or _slugify(titolo)
+    return body, cover, slug
 
 
 if __name__ == "__main__":
     topic = " ".join(sys.argv[1:]).strip() or "Gustaf Westman x Nike ceramica scultorea"
-    body, cover = genera_articolo(topic)
-    print("COPERTINA:", cover, "\n")
+    body, cover, slug = genera_articolo(topic)
+    print("COPERTINA:", cover, "| SLUG:", slug, "\n")
     print(body)

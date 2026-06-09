@@ -162,8 +162,10 @@ def find_checked(token, db_id):
         title = "".join(t.get("plain_text", "") for t in props["Notizia"]["title"])
         summary = "".join(t.get("plain_text", "") for t in props["Di cosa parla"]["rich_text"])
         fonte = "".join(t.get("plain_text", "") for t in props["Fonte"]["rich_text"])
+        cat = props.get("Categoria", {}).get("select")
         m = re.search(r"https?://\S+", fonte)
         out.append({"page_id": p["id"], "title": title, "summary": summary,
+                    "categoria": cat["name"] if cat else "",
                     "fonte_url": m.group(0).rstrip(").,") if m else ""})
     return out
 
@@ -193,6 +195,38 @@ def urls_coperti(token, db_id, days=7):
 def set_cover(token, page_id, url):
     _req("PATCH", f"/pages/{page_id}", token,
          {"properties": {"Copertina": {"url": url}}})
+
+
+def set_slug(token, page_id, slug):
+    _req("PATCH", f"/pages/{page_id}", token,
+         {"properties": {"Slug": {"rich_text": [{"text": {"content": slug[:200]}}]}}})
+
+
+def articoli_correlati(token, db_id, categoria, exclude_id="", limit=6):
+    """Articoli REALI gia' scritti (Stato=Fatto) della stessa categoria, con slug.
+    Sono i candidati per i link interni: l'AI puo' linkare solo questi."""
+    if not categoria:
+        return []
+    payload = {"page_size": 30, "filter": {"and": [
+        {"property": "Categoria", "select": {"equals": categoria}},
+        {"property": "Stato", "select": {"equals": "Fatto"}},
+        {"property": "Slug", "rich_text": {"is_not_empty": True}},
+    ]}}
+    try:
+        res = _req("POST", f"/databases/{db_id}/query", token, payload)
+    except Exception:
+        return []
+    out = []
+    for p in res.get("results", []):
+        if p["id"] == exclude_id:
+            continue
+        title = "".join(t.get("plain_text", "") for t in p["properties"]["Notizia"]["title"])
+        slug = "".join(t.get("plain_text", "") for t in p["properties"]["Slug"]["rich_text"])
+        if title and slug:
+            out.append({"title": title, "slug": slug.strip()})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def set_status(token, page_id, status):

@@ -30,10 +30,14 @@ def main():
         print(f"→ Approfondisco: {r['title'][:60]}", flush=True)
         notion_sync.set_status(token, r["page_id"], "In corso")
         try:
-            body, cover = genera_articolo(r["title"], r.get("summary", ""), r.get("fonte_url", ""))
+            body, cover, slug = genera_articolo(
+                r["title"], r.get("summary", ""), r.get("fonte_url", ""),
+                categoria=r.get("categoria", ""), exclude_id=r["page_id"])
             notion_sync.append_markdown(token, r["page_id"], body)
             if cover:
                 notion_sync.set_cover(token, r["page_id"], cover)
+            if slug:
+                notion_sync.set_slug(token, r["page_id"], slug)
             notion_sync.uncheck(token, r["page_id"])
             notion_sync.set_status(token, r["page_id"], "Fatto")
             print(f"  ✓ articolo scritto nella pagina Notion", flush=True)
