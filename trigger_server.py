@@ -9,8 +9,9 @@ Variabili d'ambiente: TRIGGER_TOKEN (obbligatoria), TRIGGER_PORT (default 8765)
 """
 
 import os
+import sys
 import subprocess
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 TOKEN = os.environ.get("TRIGGER_TOKEN", "")
@@ -37,20 +38,33 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        print(f"Ricevuta richiesta GET: {self.path}", flush=True)
         u = urlparse(self.path)
         if u.path.rstrip("/") != "/cerca-news":
+            print(f"Path non trovato: {u.path}", flush=True)
             return self._send(404, "🔍", "Non trovato", "Pagina inesistente.")
         token = parse_qs(u.query).get("token", [""])[0]
         if not TOKEN or token != TOKEN:
+            print("Accesso negato: token non valido", flush=True)
             return self._send(403, "⛔", "Accesso negato", "Token non valido.")
-        subprocess.run(["systemctl", "--no-block", "start", "notebooklm-research.service"])
-        self._send(200, "✅", "Ricerca avviata!",
-                   "Le nuove news compariranno nel database tra circa 2 minuti. "
-                   "Puoi chiudere questa pagina.")
+        print("Avvio di notebooklm-research.service in corso...", flush=True)
+        try:
+            subprocess.run(["systemctl", "--no-block", "start", "notebooklm-research.service"], check=True)
+            self._send(200, "✅", "Ricerca avviata!",
+                       "Le nuove news compariranno nel database tra circa 2 minuti. "
+                       "Puoi chiudere questa pagina.")
+        except Exception as e:
+            print(f"Errore durante l'avvio del servizio: {e}", flush=True)
+            self._send(500, "❌", "Errore di sistema", f"Impossibile avviare il servizio: {e}")
 
-    def log_message(self, *a):
-        pass
+    def log_message(self, format, *args):
+        # Log standard HTTP formatting to stderr
+        sys.stderr.write("%s - - [%s] %s\n" %
+                         (self.client_address[0],
+                          self.log_date_time_string(),
+                          format%args))
 
 
 if __name__ == "__main__":
-    HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    print(f"Avvio server trigger sulla porta {PORT}...", flush=True)
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
