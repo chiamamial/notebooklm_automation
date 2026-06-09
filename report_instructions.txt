@@ -22,16 +22,16 @@ importante. Ogni scheda ESATTAMENTE in questo formato:
   dettagli chiave. Metti in **grassetto** i nomi e i dati più importanti.
 - **Perché pubblicarlo:** una o due frasi sul perché interessa al lettore.
 - **Categoria:** scegli UNA sola categoria e scrivila ESATTAMENTE così:
-  - `BULBOUS / MATERIAL` → design scultoreo e materico: oggetti chunky, forme
-    organiche/bulbose, ceramiche lucide, mobili ondulati, branded homeware,
+  - `Design del Prodotto` → design scultoreo e materico: oggetti chunky, forme
+    organiche/bulbose, ceramiche, mobili, lighting, branded homeware,
     collaborazioni designer×brand (es. Gustaf Westman).
-  - `LO-FI UI / LAYOUT` → interfacce brutaliste/funzionali, design system,
-    tipografia compressa, poster e cataloghi, estetica anti-minimalista.
-  - `RAW FRAME / VISUAL` → fotografia grezza/cinematica ad alto impatto,
-    automotive/moda/urbano, grana, motion blur, fish-eye.
-  - `4/4 LOOP / AUDIO` → musica elettronica e sound design: melodic techno,
-    organic house, analisi di arpeggi/progressioni, il loop come architettura.
-  - `DESIGN MASTERS / ARCHIVE` → maestri storici del design e della grafica
+  - `Graphic Design` → grafica, interfacce e layout: identità visive, tipografia,
+    poster, editoria, design system, UI/UX, estetica anti-minimalista.
+  - `Fotografia` → fotografia e immagine: reportage, ritratto, fotografia grezza/
+    cinematica, arte visiva e installazioni a forte impatto visivo.
+  - `Musica Elettronica` → musica e sound design: melodic techno, organic house,
+    uscite, analisi di arpeggi/progressioni, il loop come architettura.
+  - `Storia del Design` → maestri storici del design e della grafica
     (es. Tadanori Yokoo, Akira Nakai), riscoperte, archivi, metodologie.
 - **Fonte:** titolo della fonte e link.
 

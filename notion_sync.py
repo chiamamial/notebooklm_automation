@@ -21,8 +21,8 @@ API = "https://api.notion.com/v1"
 VERSION = "2022-06-28"
 
 ALLOWED_CATS = [
-    "BULBOUS / MATERIAL", "LO-FI UI / LAYOUT", "RAW FRAME / VISUAL",
-    "4/4 LOOP / AUDIO", "DESIGN MASTERS / ARCHIVE",
+    "Design del Prodotto", "Graphic Design", "Fotografia",
+    "Musica Elettronica", "Storia del Design",
 ]
 # match robusto: chiave senza spazi/punteggiatura -> nome esatto
 _CAT_MAP = {re.sub(r"[^a-z0-9]", "", c.lower()): c for c in ALLOWED_CATS}
