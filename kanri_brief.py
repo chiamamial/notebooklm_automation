@@ -14,16 +14,16 @@ import kanri_engine as ke
 import notion_sync
 from daily_research import send_email
 
-CATEGORIE = """- BULBOUS / MATERIAL: design scultoreo e materico, oggetti chunky, forme
-  organiche/bulbose, ceramiche lucide, mobili ondulati, branded homeware.
-- LO-FI UI / LAYOUT: interfacce brutaliste/funzionali, design system,
-  tipografia compressa, poster e cataloghi, estetica anti-minimalista.
-- RAW FRAME / VISUAL: fotografia grezza/cinematica ad alto impatto,
-  automotive/moda/urbano, grana, motion blur, fish-eye.
-- 4/4 LOOP / AUDIO: musica elettronica e sound design, melodic techno,
-  organic house, analisi di arpeggi/progressioni, il loop come architettura.
-- DESIGN MASTERS / ARCHIVE: maestri storici del design e della grafica,
-  riscoperte, archivi, metodologie e processi."""
+CATEGORIE = """- Design del Prodotto: oggetti, mobili, lighting, ceramiche, homeware, prodotti
+  industriali, design scultoreo/materico, collaborazioni designer×brand.
+- Graphic Design: identità visive, tipografia, poster, editoria, packaging,
+  branding, interfacce/UI, layout e grafica in genere.
+- Fotografia: fotografia, reportage, ritratto, arte visiva, installazioni,
+  immagini ad alto impatto.
+- Musica Elettronica: musica elettronica e sound design, techno/house, uscite,
+  produzione, analisi del suono.
+- Storia del Design: maestri storici del design e della grafica, riscoperte,
+  archivi, metodologie e processi."""
 
 SYSTEM = (
     "Sei il caporedattore di KANRI, rivista indipendente di cultura visiva e "
@@ -45,11 +45,18 @@ Le 5 categorie di KANRI:
 {CATEGORIE}
 
 Seleziona le 7 notizie PIÙ interessanti per KANRI (scarta gossip, tech
-generalista, pubblicità, e i doppioni). Per ognuna restituisci un oggetto JSON:
+generalista, pubblicità, e i doppioni).
+PRIORITÀ EDITORIALE: KANRI è focalizzata soprattutto su PRODUCT DESIGN e GRAPHIC
+DESIGN. Delle 7 news, ALMENO 4-5 devono essere di "Design del Prodotto" o
+"Graphic Design". Le restanti 2-3 coprono Fotografia / Musica Elettronica /
+Storia del Design. Se non ci sono abbastanza news product/graphic forti, riempi
+con le altre categorie, ma privilegia sempre quelle due.
+
+Per ognuna restituisci un oggetto JSON:
 - "idx": l'indice della news nell'elenco
 - "titolo": un titolo in stile magazine, in italiano (riscritto, accattivante)
-- "categoria": ESATTAMENTE una tra: BULBOUS / MATERIAL, LO-FI UI / LAYOUT,
-  RAW FRAME / VISUAL, 4/4 LOOP / AUDIO, DESIGN MASTERS / ARCHIVE
+- "categoria": ESATTAMENTE una tra: Design del Prodotto, Graphic Design,
+  Fotografia, Musica Elettronica, Storia del Design
 - "di_cosa_parla": 3-4 frasi in italiano che spiegano bene la notizia
 - "perche": una frase sul perché interessa al lettore di KANRI
 

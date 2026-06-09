@@ -1,9 +1,14 @@
 # Feed RSS nativi per KANRI (US / JP / EU, no Italia). Uno per riga, # = commento.
 
-# --- Design / oggetti / materia ---
+# --- Product design / oggetti / materia ---
 https://www.dezeen.com/feed/
 https://www.core77.com/feed
+https://www.yankodesign.com/feed/
+https://design-milk.com/feed/
+
+# --- Graphic design / grafica / tipografia ---
 https://www.creativereview.co.uk/feed/
+https://www.creativeboom.com/feed/
 https://www.printmag.com/feed/
 https://www.slanted.de/feed/
 
