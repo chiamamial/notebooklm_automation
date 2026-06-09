@@ -124,3 +124,23 @@ estratto da `Di cosa parla`).
 - Lingua dei contenuti: italiano.
 - Identità "Kanri": magazine di arte, design e cultura visiva.
 ```
+
+---
+
+## 9. Aggiornamenti SEO (per il sito)
+
+Il corpo articolo ora include anche:
+- **`## FAQ`** (PRIMA di `## SEO`, quindi è PUBBLICA): 3-4 domande con risposta.
+  Il sito deve renderizzarla come sezione **E** generare lo **schema FAQPage**
+  (schema.org/FAQPage) → rich result (le domande a fisarmonica su Google).
+- **Link interni**: nel corpo possono esserci link markdown relativi tipo
+  `[titolo](/articolo/<slug>)` verso altri articoli KANRI. Il sito deve risolverli
+  alla pagina articolo corrispondente (stessa struttura URL).
+
+Proprietà ora ESISTENTI nel database (non più "da aggiungere"):
+- **`Slug`** (rich_text) → l'URL dell'articolo: usare `/articolo/<slug>`.
+- **`Copertina`** (url) → immagine di copertina/anteprima.
+- **`Data pubblicazione`** (date) → data di messa online.
+
+Schema.org consigliati sul sito: **Article** (o NewsArticle), **FAQPage**,
+**BreadcrumbList**. Più sitemap.xml, meta/OG, alt text immagini, canonical.
