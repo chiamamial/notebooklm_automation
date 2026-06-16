@@ -24,6 +24,7 @@ Variabili d'ambiente:
 
 import os
 import re
+import shutil
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -148,10 +149,23 @@ def main():
     durata = stima_durata(copione)
     print(f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})", flush=True)
 
-    # 2. audio
+    # 2. audio (voce)
     mp3 = Path(f"kanri-pills-{oggi.isoformat()}.mp3")
-    voce = genera_audio(copione, str(mp3))
-    print(f"TTS: audio generato ({mp3.stat().st_size // 1024} KB) con voce {voce}", flush=True)
+    voce_mp3 = Path(f"kanri-pills-{oggi.isoformat()}.voce.mp3")
+    voce = genera_audio(copione, str(voce_mp3))
+    print(f"TTS: voce generata ({voce_mp3.stat().st_size // 1024} KB) con {voce}", flush=True)
+
+    # 2b. mix con sottofondo musicale (intro pulita + ducking + fade out)
+    bg = os.environ.get("PODCAST_BG_MUSIC",
+                        str(Path(__file__).parent / "assets" / "kanri-bed.mp3"))
+    if shutil.which("ffmpeg") and os.path.exists(bg):
+        ke.mix_audio(str(voce_mp3), bg, str(mp3),
+                     intro=float(os.environ.get("PODCAST_INTRO_SEC", "4")),
+                     volume=float(os.environ.get("PODCAST_MUSIC_VOLUME", "0.30")))
+        print(f"Mix: sottofondo applicato -> {mp3.stat().st_size // 1024} KB", flush=True)
+    else:
+        mp3 = voce_mp3  # niente ffmpeg/traccia: pubblica la sola voce
+        print("  (ffmpeg o traccia assenti: nessun sottofondo, uso la sola voce)", flush=True)
 
     # 3. upload su Internet Archive
     titolo = f"KANRI Pills — {settimana}"

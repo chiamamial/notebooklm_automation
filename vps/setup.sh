@@ -8,7 +8,7 @@ REPO=https://github.com/chiamamial/notebooklm_automation.git
 
 echo "== 1. Pacchetti di sistema =="
 apt-get update -y
-apt-get install -y python3-venv python3-pip git
+apt-get install -y python3-venv python3-pip git ffmpeg
 
 echo "== 2. Repo in $APP_DIR =="
 if [ ! -d "$APP_DIR/.git" ]; then

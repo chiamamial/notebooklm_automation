@@ -225,6 +225,51 @@ def tts_edge(text, out_mp3, voice="it-IT-IsabellaNeural", rate="-4%", pitch="+0H
     return out_mp3
 
 
+# ---------- Mix audio (sottofondo musicale con ducking, via ffmpeg) ----------
+
+def _durata_audio(path):
+    """Durata in secondi di un file audio (via ffprobe)."""
+    import subprocess
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "csv=p=0", path],
+        capture_output=True, text=True, check=True)
+    return float(out.stdout.strip())
+
+
+def mix_audio(voce_mp3, musica_mp3, out_mp3, intro=4.0, volume=0.30,
+              tail=4.0, fade=4.0, threshold=0.03, ratio=8):
+    """Monta la voce su una base musicale: `intro` secondi di musica pulita,
+    poi voce con musica in ducking (si abbassa quando si parla), `fade` secondi
+    di dissolvenza finale. La musica viene messa in loop per coprire la durata.
+    Richiede ffmpeg/ffprobe nel PATH."""
+    import subprocess
+
+    voce_dur = _durata_audio(voce_mp3)
+    total = round(intro + voce_dur + tail, 3)
+    fade_st = round(total - fade, 3)
+    delay_ms = int(intro * 1000)
+    filtro = (
+        f"[0:a]aformat=channel_layouts=stereo,volume={volume},"
+        f"atrim=0:{total},asetpts=N/SR/TB[bg0];"
+        f"[1:a]aformat=channel_layouts=stereo,adelay={delay_ms}|{delay_ms}[vo];"
+        f"[vo]asplit=2[vo1][vk0];"
+        f"[vk0]apad=whole_dur={total}[vokey];"
+        f"[bg0][vokey]sidechaincompress=threshold={threshold}:ratio={ratio}:"
+        f"attack=20:release=400[bgd];"
+        f"[bgd][vo1]amix=inputs=2:duration=longest:normalize=0[m];"
+        f"[m]afade=t=out:st={fade_st}:d={fade}[out]"
+    )
+    cmd = ["ffmpeg", "-y", "-loglevel", "error",
+           "-stream_loop", "-1", "-i", musica_mp3, "-i", voce_mp3,
+           "-filter_complex", filtro, "-map", "[out]",
+           "-ac", "2", "-b:a", "128k", out_mp3]
+    subprocess.run(cmd, check=True)
+    if not os.path.exists(out_mp3) or os.path.getsize(out_mp3) == 0:
+        raise RuntimeError("ffmpeg non ha prodotto l'audio mixato")
+    return out_mp3
+
+
 # ---------- ElevenLabs (voce di alta qualità, piano free senza carta) ----------
 
 def _post_bytes(url, payload, headers, timeout=120):
