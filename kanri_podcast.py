@@ -149,15 +149,15 @@ def main():
     print(f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})", flush=True)
 
     # 2. audio
-    mp3 = Path(f"kanri-audio-{oggi.isoformat()}.mp3")
+    mp3 = Path(f"kanri-pills-{oggi.isoformat()}.mp3")
     voce = genera_audio(copione, str(mp3))
     print(f"TTS: audio generato ({mp3.stat().st_size // 1024} KB) con voce {voce}", flush=True)
 
     # 3. upload su Internet Archive
-    titolo = f"KANRI Audio — {settimana}"
-    identifier = f"kanri-audio-{oggi.isoformat()}"
-    descrizione = ("Puntata settimanale di KANRI, rivista indipendente di arte, "
-                   f"design e cultura visiva. Gli articoli pubblicati nella settimana {settimana}.")
+    titolo = f"KANRI Pills — {settimana}"
+    identifier = f"kanri-pills-{oggi.isoformat()}"
+    descrizione = ("KANRI Pills, il punto settimanale di KANRI, rivista indipendente "
+                   f"di arte, design e cultura visiva. Gli articoli pubblicati nella settimana {settimana}.")
     audio_url = ""
     if os.environ.get("ARCHIVE_ACCESS_KEY"):
         meta = {
@@ -189,12 +189,12 @@ def main():
         print("  (PODCAST_DB_ID non impostata: salto il salvataggio su Notion)", flush=True)
 
     # 5. email di notifica con copione in allegato
-    txt = Path(f"kanri-audio-{oggi.isoformat()}.txt")
+    txt = Path(f"kanri-pills-{oggi.isoformat()}.txt")
     txt.write_text(copione, encoding="utf-8")
     corpo_mail = (f"# {titolo}\n\nDurata stimata: {durata}\n"
                   f"Articoli: {len(articoli)}\n"
                   f"Audio: {audio_url or '(upload saltato)'}\n\n---\n\n{copione}")
-    send_email(f"🎙️ KANRI Audio — {settimana}", corpo_mail, str(txt))
+    send_email(f"🎙️ KANRI Pills — {settimana}", corpo_mail, str(txt))
 
 
 def _pulisci_copione(testo):
