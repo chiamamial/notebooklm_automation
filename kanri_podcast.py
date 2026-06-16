@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Podcast settimanale KANRI Audio.
+Podcast settimanale KANRI Tape.
 
 Ogni lunedì mattina:
   1. legge da Notion gli articoli PUBBLICATI nell'ultima settimana
@@ -107,7 +107,7 @@ def costruisci_prompt(articoli, settimana):
     return (f"Settimana di riferimento: {settimana}.\n"
             f"Numero di articoli pubblicati: {len(articoli)}.\n\n"
             f"Ecco i materiali (usa SOLO queste informazioni):\n\n{materiali}\n\n"
-            f"Scrivi il copione della puntata di KANRI Audio seguendo le istruzioni.")
+            f"Scrivi il copione della puntata di KANRI Tape seguendo le istruzioni.")
 
 
 def stima_durata(testo):
@@ -150,8 +150,8 @@ def main():
     print(f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})", flush=True)
 
     # 2. audio (voce)
-    mp3 = Path(f"kanri-pills-{oggi.isoformat()}.mp3")
-    voce_mp3 = Path(f"kanri-pills-{oggi.isoformat()}.voce.mp3")
+    mp3 = Path(f"kanri-tape-{oggi.isoformat()}.mp3")
+    voce_mp3 = Path(f"kanri-tape-{oggi.isoformat()}.voce.mp3")
     voce = genera_audio(copione, str(voce_mp3))
     print(f"TTS: voce generata ({voce_mp3.stat().st_size // 1024} KB) con {voce}", flush=True)
 
@@ -168,9 +168,9 @@ def main():
         print("  (ffmpeg o traccia assenti: nessun sottofondo, uso la sola voce)", flush=True)
 
     # 3. upload su Internet Archive
-    titolo = f"KANRI Pills — {settimana}"
-    identifier = f"kanri-pills-{oggi.isoformat()}"
-    descrizione = ("KANRI Pills, il punto settimanale di KANRI, rivista indipendente "
+    titolo = f"KANRI Tape — {settimana}"
+    identifier = f"kanri-tape-{oggi.isoformat()}"
+    descrizione = ("KANRI Tape, il punto settimanale di KANRI, rivista indipendente "
                    f"di arte, design e cultura visiva. Gli articoli pubblicati nella settimana {settimana}.")
     audio_url = ""
     if os.environ.get("ARCHIVE_ACCESS_KEY"):
@@ -203,12 +203,12 @@ def main():
         print("  (PODCAST_DB_ID non impostata: salto il salvataggio su Notion)", flush=True)
 
     # 5. email di notifica con copione in allegato
-    txt = Path(f"kanri-pills-{oggi.isoformat()}.txt")
+    txt = Path(f"kanri-tape-{oggi.isoformat()}.txt")
     txt.write_text(copione, encoding="utf-8")
     corpo_mail = (f"# {titolo}\n\nDurata stimata: {durata}\n"
                   f"Articoli: {len(articoli)}\n"
                   f"Audio: {audio_url or '(upload saltato)'}\n\n---\n\n{copione}")
-    send_email(f"🎙️ KANRI Pills — {settimana}", corpo_mail, str(txt))
+    send_email(f"🎙️ KANRI Tape — {settimana}", corpo_mail, str(txt))
 
 
 def _pulisci_copione(testo):

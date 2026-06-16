@@ -36,7 +36,7 @@ graph TD
     NotionButton[Notion Button] -->|Trigger manuale| WebServer[trigger_server.py]
     WebServer -->|Avvia servizio| Brief
 
-    %% Flusso Podcast settimanale (KANRI Pills)
+    %% Flusso Podcast settimanale (KANRI Tape)
     NotionDB -->|Lun 08:00: articoli pubblicati settimana| Podcast[kanri_podcast.py]
     Podcast -->|Copione| LLMpod{Gemini / OpenRouter}
     LLMpod -->|Testo parlato| Podcast
@@ -128,7 +128,7 @@ Gli script di automazione risiedono nella cartella `/opt/notebooklm` su una VPS 
 * `notion_watcher.py`: Demone che esamina Notion ogni 5 minuti alla ricerca di righe con `Scrivi articolo` spuntato, avviando il processo di generazione.
 * `notion_sync.py`: Client Notion personalizzato per convertire il Markdown in blocchi ricchi Notion e aggiornare le proprietà delle pagine.
 * `kanri_engine.py`: Gestore unificato delle chiamate API per LLM (Gemini/OpenRouter), Tavily, Firecrawl, RSS e email.
-* `kanri_podcast.py`: Genera la puntata podcast settimanale **KANRI Pills** (digest breve ~2 min). Legge da Notion gli articoli pubblicati nell'ultima settimana, fa scrivere il copione a un LLM, lo sintetizza in mp3 con **ElevenLabs** (free, senza carta; fallback Google Chirp 3 HD → edge-tts), carica l'audio su **Internet Archive** e salva i metadati nel database Notion "Podcast".
+* `kanri_podcast.py`: Genera la puntata podcast settimanale **KANRI Tape** (digest breve ~2 min). Legge da Notion gli articoli pubblicati nell'ultima settimana, fa scrivere il copione a un LLM, lo sintetizza in mp3 con **ElevenLabs** (free, senza carta; fallback Google Chirp 3 HD → edge-tts), carica l'audio su **Internet Archive** e salva i metadati nel database Notion "Podcast".
 * `podcast_instructions.txt`: Prompt di voce del podcast (copione parlato, tono sobrio, regola anti-invenzione, struttura intro/articoli/chiusura).
 * `trigger_server.py`: Server HTTP leggero (porta `8765`) che risponde all'endpoint `/cerca-news?token=...` per forzare la scansione RSS manuale.
 * `kanri_feeds.txt`: Elenco dei feed RSS da scansionare.
@@ -153,14 +153,14 @@ Accedi alla VPS con `ssh root@217.160.100.63`:
 * **Controllare lo stato del ricevitore**: `systemctl status notebooklm-trigger.service`
 * **Riavviare il server trigger**: `systemctl restart notebooklm-trigger.service`
 
-#### Podcast Settimanale (KANRI Pills)
+#### Podcast Settimanale (KANRI Tape)
 * **Stato del timer**: `systemctl status notebooklm-podcast.timer`
 * **Generare subito una puntata (test)**: `systemctl start notebooklm-podcast.service`
 * **Log live della generazione**: `journalctl -u notebooklm-podcast.service -f`
 
 ---
 
-## 🎙️ 2-bis. Podcast Settimanale "KANRI Pills"
+## 🎙️ 2-bis. Podcast Settimanale "KANRI Tape"
 
 Ogni **lunedì alle 08:00** (timer `notebooklm-podcast.timer`) lo script `kanri_podcast.py`:
 
@@ -168,7 +168,7 @@ Ogni **lunedì alle 08:00** (timer `notebooklm-podcast.timer`) lo script `kanri_
 2. **Scrive il copione** con l'LLM (Gemini → OpenRouter, modelli free) usando `podcast_instructions.txt`: un **digest breve (~2 minuti)** in voce KANRI, con regola anti-invenzione (solo dati realmente presenti nelle fonti). Il copione viene troncato a `PODCAST_MAX_CHARS` (default 2400) su confine di frase, per non sforare la quota TTS mensile.
 3. **Sintetizza l'audio** con **ElevenLabs** (piano free, **nessuna carta**: 10.000 caratteri/mese ≈ 4-5 puntate brevi). Catena di fallback automatica: ElevenLabs → Google Chirp 3 HD (se presente `GOOGLE_TTS_API_KEY`) → `edge-tts` (sempre disponibile). Prima di sintetizzare verifica i caratteri residui del mese via API e, se insufficienti, passa al fallback.
 3b. **Monta il sottofondo musicale** con `ffmpeg`: alcuni secondi di musica pulita in apertura (`PODCAST_INTRO_SEC`), poi la voce con la base in **ducking** (si abbassa quando si parla, `PODCAST_MUSIC_VOLUME`) e dissolvenza finale. La traccia è `assets/kanri-bed.mp3` (override con `PODCAST_BG_MUSIC`). Se `ffmpeg` o la traccia mancano, pubblica la sola voce.
-4. **Carica l'mp3 su Internet Archive** (hosting gratuito e permanente con API S3). L'URL pubblico è `https://archive.org/download/kanri-pills-<data>/kanri-pills-<data>.mp3`. Le chiavi si generano su `https://archive.org/account/s3.php` e vanno in `ARCHIVE_ACCESS_KEY` / `ARCHIVE_SECRET_KEY`.
+4. **Carica l'mp3 su Internet Archive** (hosting gratuito e permanente con API S3). L'URL pubblico è `https://archive.org/download/kanri-tape-<data>/kanri-tape-<data>.mp3`. Le chiavi si generano su `https://archive.org/account/s3.php` e vanno in `ARCHIVE_ACCESS_KEY` / `ARCHIVE_SECRET_KEY`.
 5. **Salva i metadati su Notion** nel database "Podcast" (`PODCAST_DB_ID`) — il frontend leggerà da qui per costruire player e feed RSS.
 6. **Invia un'email** di notifica con il copione allegato (Resend).
 
@@ -180,7 +180,7 @@ Crea un nuovo database Notion, condividilo con l'integrazione e incolla il suo I
 
 | Proprietà | Tipo | Contenuto |
 |:---|:---|:---|
-| `Titolo` | title | Es. "KANRI Pills — 9–15 giugno 2026". |
+| `Titolo` | title | Es. "KANRI Tape — 9–15 giugno 2026". |
 | `Data` | date | Data di pubblicazione della puntata. |
 | `Audio` | url | URL diretto dell'mp3 su Internet Archive (per `<audio>` ed `<enclosure>` RSS). |
 | `Descrizione` | rich_text | Sinossi breve della puntata. |
