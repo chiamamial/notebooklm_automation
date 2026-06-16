@@ -1,5 +1,7 @@
 report-*.md
 brief-*.md
+kanri-audio-*.mp3
+kanri-audio-*.txt
 kanri-pills-*.mp3
 kanri-pills-*.txt
 storage_state.json
