@@ -1,275 +1,312 @@
-# 📚 Documentazione — NotebookLM Daily Research
+# 📚 Documentazione Completa KANRI: Automazione & Frontend Web
 
-Automazione che ogni mattina alle **07:00 (ora italiana)** fa una ricerca con
-Google NotebookLM su arte, design, grafica, UI/UX e musica, e invia un **brief
-editoriale** in italiano via email.
+Benvenuto nella documentazione tecnica e operativa dell'infrastruttura editoriale e web per **KANRI** (rivista indipendente di arte, design e cultura visiva). 
 
-- **Repo:** https://github.com/chiamamial/notebooklm_automation (pubblico)
-- **Gira su:** VPS Ubuntu 24.04 — IP `217.160.100.63` — cartella `/opt/notebooklm`
-- **Email:** via Resend → `chiamamial93@gmail.com`
+Questo documento descrive sia l'**infrastruttura di automazione backend** (ospitata su un server VPS Ubuntu) sia il **sito web frontend** (Next.js ospitato su Vercel), che sono legati da **Notion** utilizzato come Headless CMS.
 
 ---
 
-## Indice
-1. [Come funziona](#1-come-funziona)
-2. [Struttura dei file](#2-struttura-dei-file)
-3. [Collegarsi al server](#3-collegarsi-al-server)
-4. [Comandi di tutti i giorni](#4-comandi-di-tutti-i-giorni)
-5. [Cambiare l'output (temi, formato, orario)](#5-cambiare-loutput)
-6. [Manutenzione della sessione Google](#6-manutenzione-della-sessione-google)
-7. [Problemi comuni e soluzioni](#7-problemi-comuni-e-soluzioni)
-8. [Riferimento tecnico](#8-riferimento-tecnico)
-9. [Cruscotto Notion + articoli on-demand](#9-cruscotto-notion)
+## 🗺️ Architettura Generale dell'Ecosistema
 
----
+L'intero sistema KANRI è circolare: l'automazione raccoglie e genera contenuti che vengono salvati su Notion, e il frontend Next.js interroga Notion per generare le pagine statiche distribuite agli utenti.
 
-## 1. Come funziona
+```mermaid
+graph TD
+    %% Fonti esterne
+    Feeds[Feed RSS <br>kanri_feeds.txt] -->|07:00 timer| Brief[kanri_brief.py]
+    
+    %% Flusso Curation
+    Brief -->|1. Filtra già pubblicati| NotionDB[(Database Notion <br>'Radar News')]
+    Brief -->|2. Seleziona & cura| OpenRouter{OpenRouter/LLM}
+    OpenRouter -->|3. Inserisce news 'Da fare'| NotionDB
+    Brief -->|4. Invia email| Resend[Resend API] -->|Email| UserEmail[Email redazione]
+    
+    %% Flusso Watcher (Generazione Articoli)
+    NotionDB -->|Spunta 'Scrivi articolo'| Watcher[notion_watcher.py]
+    Watcher -->|Richiesta articolo| Article[kanri_article.py]
+    Article -->|Ricerca SEO & Fonti| Tavily[Tavily Search API]
+    Article -->|Estrae testo originale| Firecrawl[Firecrawl Scraper API]
+    Article -->|Trova articoli correlati| NotionDB
+    Article -->|Genera articolo| Gemini{Gemini / OpenRouter}
+    Gemini -->|Scrive in pagina + SEO| Watcher
+    Watcher -->|Aggiorna properties & body| NotionDB
+    Watcher -->|Stato = Fatto| NotionDB
+    
+    %% Trigger manuale
+    NotionButton[Notion Button] -->|Trigger manuale| WebServer[trigger_server.py]
+    WebServer -->|Avvia servizio| Brief
 
-Ogni mattina un *timer* di sistema (systemd) avvia lo script `daily_research.py`,
-che esegue in sequenza:
+    %% Flusso Podcast settimanale (KANRI Audio)
+    NotionDB -->|Lun 08:00: articoli pubblicati settimana| Podcast[kanri_podcast.py]
+    Podcast -->|Copione| LLMpod{Gemini / OpenRouter}
+    LLMpod -->|Testo parlato| Podcast
+    Podcast -->|Sintesi vocale gratis| EdgeTTS[edge-tts mp3]
+    EdgeTTS -->|Upload audio| Archive[(Internet Archive)]
+    Podcast -->|Metadati puntata| PodcastDB[(Database Notion 'Podcast')]
+    PodcastDB -->|Player + feed RSS| Vercel
 
-```
-1. Verifica login a NotebookLM (sessione Google salvata su file)
-2. Crea un notebook "Daily Research <data>"
-3. Lancia una ricerca sul web (modalità FAST) e importa le fonti citate
-4. Genera un report editoriale seguendo report_instructions.txt
-5. Scarica il report in Markdown
-6. Invia il report via email (Resend)
-7. Cancella il notebook (per non accumulare)
-```
-
-In parallelo, un secondo timer ogni **20 minuti** fa un "refresh" leggero per
-**tenere viva la sessione Google** (altrimenti scadrebbe).
-
-> ⚙️ Tecnologia: libreria **non ufficiale** `notebooklm-py`. Non esiste un'API
-> ufficiale di NotebookLM, quindi può capitare (raramente) che qualcosa si
-> rompa se Google cambia qualcosa.
-
-### Regola d'oro
-La sessione Google vive **solo sul VPS**. Non usare lo stesso login altrove
-(es. sul Mac) o le due copie si "litigano" i cookie e smette di funzionare.
-
----
-
-## 2. Struttura dei file
-
-Tutti i file sono nel repo e su `/opt/notebooklm` sul server.
-
-| File | A cosa serve |
-|------|--------------|
-| `daily_research.py` | Lo script principale (orchestratore) |
-| **`prompt.txt`** | **COSA cercare** — i temi della ricerca |
-| **`report_instructions.txt`** | **COME scrivere** il brief (struttura, tono, schede) |
-| `requirements.txt` | Dipendenze Python |
-| `notebooklm.env` | Segreti (API key Resend). *Solo sul server, non nel repo* |
-| `vps/setup.sh` | Script di installazione completa del server |
-| `vps/notebooklm-research.{service,timer}` | Timer della ricerca giornaliera |
-| `vps/notebooklm-keepalive.{service,timer}` | Timer del refresh sessione |
-
-I file in **grassetto** sono quelli che modifichi per personalizzare l'output.
-
----
-
-## 3. Collegarsi al server
-
-Apri il **Terminale** sul Mac (Spotlight → "Terminale") e scrivi:
-
-```bash
-ssh root@217.160.100.63
-```
-Inserisci la password (non si vede mentre digiti, è normale) → `Invio`.
-Quando compare `root@ubuntu:~#` sei dentro il server.
-
-Per uscire dal server: scrivi `exit` e `Invio`.
-
----
-
-## 4. Comandi di tutti i giorni
-
-> Questi comandi si lanciano **dentro il server** (dopo esserti collegato).
-
-### Lanciare subito una ricerca di prova
-```bash
-systemctl start notebooklm-research.service
-```
-(blocca il terminale per ~2 minuti finché non finisce)
-
-### Vedere i log dal vivo (cosa sta facendo)
-```bash
-journalctl -u notebooklm-research.service -f
-```
-Esci dalla diretta con `Ctrl + C`.
-
-### Vedere com'è andato l'ultimo run
-```bash
-journalctl -u notebooklm-research.service --since "-1 day" --no-pager | tail -30
-```
-
-### Controllare se i timer sono attivi e quando partono
-```bash
-systemctl list-timers 'notebooklm-*' --no-pager
-```
-
-### Vedere lo stato dei servizi
-```bash
-systemctl status notebooklm-research.service --no-pager
-systemctl status notebooklm-keepalive.timer --no-pager
-```
-
-### Verificare che il login a NotebookLM sia valido
-```bash
-NOTEBOOKLM_HOME=/opt/notebooklm/nlm_home /opt/notebooklm/.venv/bin/notebooklm auth check --test
-```
-Deve dire **`Authentication is valid`**.
-
-### Leggere l'ultimo report generato
-```bash
-cat /opt/notebooklm/report-*.md
+    %% Frontend Next.js (Vercel)
+    Vercel[Next.js App Router <br>Vercel Host] -->|Fetch Notion API <br>a build time / ISR| NotionDB
+    Vercel -->|Deploy Hook (POST)| Vercel
+    NotionDB -->|Spunta 'Pubblica'| Vercel
+    
+    %% Client finali
+    Users[Utenti Web] -->|Navigazione| Vercel
+    AI_Bots[AI Crawlers] -->|llms.txt / Robots| Vercel
 ```
 
 ---
 
-## 5. Cambiare l'output
+## 🗃️ 1. Il Database Notion ("Radar News") come CMS
 
-> Dopo ogni modifica nel repo, vanno aggiornati i file sul server (vedi sotto).
+Il database Notion rappresenta l'unica sorgente di verità (Single Source of Truth) dei contenuti di KANRI.
 
-### A) Cambiare i TEMI della ricerca
-Modifica `prompt.txt` (è la domanda che fa NotebookLM).
+### 📋 Schema dei Campi del Database
 
-### B) Cambiare il FORMATO del brief
-Modifica `report_instructions.txt` (struttura delle schede, tono, sezioni).
-
-### C) Cambiare l'ORARIO di invio
-Modifica `vps/notebooklm-research.timer`, riga `OnCalendar`. Esempio per le 08:30:
-```
-OnCalendar=*-*-* 08:30:00
-```
-Poi sul server:
-```bash
-cp /opt/notebooklm/vps/notebooklm-research.timer /etc/systemd/system/
-systemctl daemon-reload
-systemctl restart notebooklm-research.timer
-```
-
-### D) Applicare le modifiche fatte nel repo, sul server
-Dopo aver modificato e fatto `git push` dal Mac, sul server:
-```bash
-cd /opt/notebooklm && git pull
-```
-(`prompt.txt` e `report_instructions.txt` hanno effetto subito al run successivo)
-
-### Modalità ricerca
-È fissata su **`fast`** apposta: `deep` si impalla e va in timeout. Non cambiarla.
-Si trova in `/opt/notebooklm/notebooklm.env` → `RESEARCH_MODE=fast`.
+| Proprietà | Tipo | Ruolo | Fallback / Note |
+|:---|:---|:---|:---|
+| `Notizia` | title | Titolo dell'articolo / news. | Titolo principale mostrato sul sito. |
+| `Categoria` | select | Categoria tematica (Arte, Arte visiva, Product design, Graphic design, UI-UX design, Architettura, Musica, Fotografia, Cultura visiva). | Usato per l'ordinamento e la categorizzazione. |
+| `Di cosa parla` | rich_text | Breve riassunto editoriale (1-2 frasi). | Usato come anteprima dell'articolo in homepage. |
+| `Fonte` | rich_text | Titolo della fonte + eventuale link web. | Riferimento usato dall'AI per la documentazione. |
+| `Scrivi articolo` | checkbox | Trigger manuale per l'automazione. | Spuntando questa casella, il watcher VPS scriverà l'articolo. |
+| `Stato` | select | Stato redazionale (`Da fare`, `In corso`, `Fatto`). | Gestito dall'automazione per tracciare lo stato di scrittura. |
+| `Pubblica` | checkbox | Spunta di visibilità pubblica. | Il sito Next.js mostra l'articolo online solo se `Pubblica` è attiva. |
+| `Data` | date | Data della news inserita dal brief RSS. | Interna, non usata per l'ordinamento pubblico. |
+| `Data pubblicazione`| date | Data effettiva di rilascio dell'articolo. | Impostata automaticamente al giorno di pubblicazione. |
+| `Copertina` | files / url | Immagine di copertina dell'articolo. | Se assente, il frontend genera una cover halftone grafica. |
+| `Slug` | rich_text | Slug URL della pagina (es. `nome-articolo`). | Estratto dal blocco SEO o generato dallo slugify del titolo. |
 
 ---
 
-## 6. Manutenzione della sessione Google
+### 📝 Struttura del Corpo Pagina (Markdown logico)
 
-La sessione (i cookie di Google) di solito si mantiene viva da sola grazie al
-keepalive. Ma se un giorno smette di funzionare con un errore tipo
-*"Authentication expired"*, va rifatto il login. Procedura:
+Il corpo della pagina Notion ospita il testo completo dell'articolo scritto in Markdown. Contiene una riga di demarcazione fondamentale `## SEO` che divide la parte **pubblica** da quella **privata (redazionale)**.
 
-**Sul Mac:**
-```bash
-# 1. rifai il login (si apre il browser, accedi a Google)
-notebooklm login
+Il parser del sito (`lib/parse.ts`) legge il corpo pagina fino all'intestazione `## SEO` per la visualizzazione sul sito, mentre analizza le righe successive per estrarre i metadati.
 
-# 2. copia il file della sessione sul server
-scp ~/.notebooklm/profiles/default/storage_state.json \
-    root@217.160.100.63:/opt/notebooklm/nlm_home/profiles/default/
-```
+```markdown
+Il primo paragrafo funge da attacco dell'articolo e riceve il capolettera sul sito.
+Deve contenere 1-2 frasi chiave che sintetizzano l'avvenimento.
 
-> ⚠️ Dopo il login sul Mac, **non lanciare lo script sul Mac**: la sessione deve
-> restare "di proprietà" del server.
+## Sezione 1
+Testo del paragrafo con **grassetto**, *corsivo* e [link veri](https://...).
 
----
+## Sezione 2
+Altro testo strutturato. Le citazioni grafiche si fanno così:
+> Questa è una citazione in evidenza.
 
-## 7. Problemi comuni e soluzioni
+## Conclusione
+Paragrafo conclusivo dell'articolo.
 
-| Sintomo | Causa probabile | Soluzione |
-|---------|-----------------|-----------|
-| Non arriva la mail | Login scaduto | Rifai login (sezione 6) |
-| `Authentication expired` nei log | Sessione desincronizzata | Rifai login (sezione 6) |
-| `timeout dopo Xs` | Ricerca lenta/bloccata | Normale ogni tanto, riparte il giorno dopo; verifica sia `fast` |
-| Mail in Spam | Mittente generico Resend | Sposta in "Posta in arrivo"; o verifica un dominio su Resend |
-| `FileNotFoundError: notebooklm` | (già risolto in passato) | `cd /opt/notebooklm && git pull` |
+## SEO
+- Titolo SEO: Titolo ottimizzato per i motori di ricerca
+- Meta description: Descrizione breve (120-155 caratteri) per Google
+- Slug URL: slug-della-pagina
+- Parole chiave: termine1, termine2, termine3
 
-### Riavviare tutto da capo (se serve)
-```bash
-cd /opt/notebooklm && git pull
-bash vps/setup.sh
+## SOCIAL
+### Instagram
+Caption proposta per i social...
+
+## IMMAGINI
+- Suggerimento immagine 1 (fonte...)
+
+## NOTE FONTI
+- https://fonteoriginale.com/news
 ```
 
 ---
 
-## 8. Riferimento tecnico
+## 🤖 2. Il Sistema di Automazione Editoriale (VPS)
 
-### Variabili d'ambiente (`/opt/notebooklm/notebooklm.env`)
-| Variabile | Valore |
-|-----------|--------|
-| `RESEND_API_KEY` | API key di Resend |
-| `MAIL_FROM` | mittente (es. `onboarding@resend.dev`) |
-| `MAIL_TO` | destinatario |
-| `RESEARCH_MODE` | `fast` (NON usare `deep`) |
-| `RESEARCH_TIMEOUT` | `600` (tetto secondi per fase) |
-| `REPORT_LANGUAGE` | `it` |
+Gli script di automazione risiedono nella cartella `/opt/notebooklm` su una VPS Ubuntu 24.04 (`217.160.100.63`) e sono orchestrati da **systemd timers**.
 
-### Percorsi sul server
+### 📂 Struttura dei File della VPS
+* `kanri_brief.py`: Esegue la scansione RSS mattutina, seleziona le 7 notizie migliori tramite OpenRouter LLM, crea le righe in Notion come "Da fare" e invia l'email del brief via Resend.
+* `kanri_article.py`: Script di core che esegue ricerche web via Tavily, estrae i testi delle fonti con Firecrawl, trova articoli correlati in Notion, e fa redigere l'articolo a Gemini o OpenRouter.
+* `notion_watcher.py`: Demone che esamina Notion ogni 5 minuti alla ricerca di righe con `Scrivi articolo` spuntato, avviando il processo di generazione.
+* `notion_sync.py`: Client Notion personalizzato per convertire il Markdown in blocchi ricchi Notion e aggiornare le proprietà delle pagine.
+* `kanri_engine.py`: Gestore unificato delle chiamate API per LLM (Gemini/OpenRouter), Tavily, Firecrawl, RSS e email.
+* `kanri_podcast.py`: Genera la puntata podcast settimanale **KANRI Audio**. Legge da Notion gli articoli pubblicati nell'ultima settimana, fa scrivere il copione a un LLM, lo sintetizza in mp3 con **edge-tts** (gratis), carica l'audio su **Internet Archive** e salva i metadati nel database Notion "Podcast".
+* `podcast_instructions.txt`: Prompt di voce del podcast (copione parlato, tono sobrio, regola anti-invenzione, struttura intro/articoli/chiusura).
+* `trigger_server.py`: Server HTTP leggero (porta `8765`) che risponde all'endpoint `/cerca-news?token=...` per forzare la scansione RSS manuale.
+* `kanri_feeds.txt`: Elenco dei feed RSS da scansionare.
+* `article_instructions.txt`: Prompt contenente lo stile di scrittura, le limitazioni lessicali (evitare metafore banali e frasi pubblicitarie) e le linee guida SEO.
+* `notebooklm.env`: Contiene tutte le API key e i segreti del server (escluso dal controllo Git).
+
+---
+
+### 🖥️ Comandi Utili per la VPS (via SSH)
+
+Accedi alla VPS con `ssh root@217.160.100.63`:
+
+#### Brief Mattutino (RSS -> Notion)
+* **Forzare il brief immediato**: `systemctl start notebooklm-research.service`
+* **Vedere i log live**: `journalctl -u notebooklm-research.service -f`
+
+#### Watcher di Scrittura (Notion Watcher)
+* **Controllare lo stato del watcher timer**: `systemctl status notebooklm-watcher.timer`
+* **Controllare i log di scrittura articoli**: `journalctl -u notebooklm-watcher.service -f`
+
+#### Server Trigger
+* **Controllare lo stato del ricevitore**: `systemctl status notebooklm-trigger.service`
+* **Riavviare il server trigger**: `systemctl restart notebooklm-trigger.service`
+
+#### Podcast Settimanale (KANRI Audio)
+* **Stato del timer**: `systemctl status notebooklm-podcast.timer`
+* **Generare subito una puntata (test)**: `systemctl start notebooklm-podcast.service`
+* **Log live della generazione**: `journalctl -u notebooklm-podcast.service -f`
+
+---
+
+## 🎙️ 2-bis. Podcast Settimanale "KANRI Audio"
+
+Ogni **lunedì alle 08:00** (timer `notebooklm-podcast.timer`) lo script `kanri_podcast.py`:
+
+1. **Seleziona gli articoli pubblicati** della settimana — query Notion con `Pubblica = true` e `Data pubblicazione` negli ultimi 7 giorni (variabile `PODCAST_DAYS`).
+2. **Scrive il copione** con l'LLM (Gemini → OpenRouter, modelli free) usando `podcast_instructions.txt`: un **digest breve (~2 minuti)** in voce KANRI, con regola anti-invenzione (solo dati realmente presenti nelle fonti). Il copione viene troncato a `PODCAST_MAX_CHARS` (default 2400) su confine di frase, per non sforare la quota TTS mensile.
+3. **Sintetizza l'audio** con **ElevenLabs** (piano free, **nessuna carta**: 10.000 caratteri/mese ≈ 4-5 puntate brevi). Catena di fallback automatica: ElevenLabs → Google Chirp 3 HD (se presente `GOOGLE_TTS_API_KEY`) → `edge-tts` (sempre disponibile). Prima di sintetizzare verifica i caratteri residui del mese via API e, se insufficienti, passa al fallback.
+4. **Carica l'mp3 su Internet Archive** (hosting gratuito e permanente con API S3). L'URL pubblico è `https://archive.org/download/kanri-audio-<data>/kanri-audio-<data>.mp3`. Le chiavi si generano su `https://archive.org/account/s3.php` e vanno in `ARCHIVE_ACCESS_KEY` / `ARCHIVE_SECRET_KEY`.
+5. **Salva i metadati su Notion** nel database "Podcast" (`PODCAST_DB_ID`) — il frontend leggerà da qui per costruire player e feed RSS.
+6. **Invia un'email** di notifica con il copione allegato (Resend).
+
+> Tutto il flusso è **gratuito e senza carta**: ElevenLabs free non richiede metodo di pagamento, Internet Archive offre hosting audio illimitato gratuito, gli LLM usati sono i modelli free già in uso. Nota legale: il piano free di ElevenLabs è **non commerciale** e richiede l'**attribuzione** a ElevenLabs. Le puntate restano brevi per stare nei 10.000 caratteri/mese; per puntate lunghe o uso commerciale servirebbe un piano a pagamento o Google Chirp 3 HD (che richiede una carta sul billing, pur restando a €0).
+
+### 🗃️ Schema del Database Notion "Podcast" (contratto per il frontend)
+
+Crea un nuovo database Notion, condividilo con l'integrazione e incolla il suo ID in `PODCAST_DB_ID`. Lo script popola queste proprietà:
+
+| Proprietà | Tipo | Contenuto |
+|:---|:---|:---|
+| `Titolo` | title | Es. "KANRI Audio — 9–15 giugno 2026". |
+| `Data` | date | Data di pubblicazione della puntata. |
+| `Audio` | url | URL diretto dell'mp3 su Internet Archive (per `<audio>` ed `<enclosure>` RSS). |
+| `Descrizione` | rich_text | Sinossi breve della puntata. |
+| `Durata` | rich_text | Durata stimata `mm:ss`. |
+| `Articoli` | rich_text | Titoli degli articoli trattati, separati da `;`. |
+
+Il **copione completo** viene scritto nel **corpo della pagina** (usabile come trascrizione / show-notes).
+
+Il feed podcast lato frontend (es. `/podcast.xml`) usa gli `<enclosure url=…>` puntando all'URL `Audio` su Internet Archive: il feed resta di proprietà di KANRI e può essere sottoscritto una volta su Spotify/Apple.
+
+## 🎨 3. Il Sito Web Frontend (Next.js / Vercel)
+
+Il sito web risiede nella cartella locale `/Users/alessandromazzola/Desktop/Siti/blog` ed è distribuito sulla piattaforma **Vercel** (`https://kanri.chiamamial.com`).
+
+### 🏛️ Architettura del Codice
+Il sito è sviluppato con **Next.js (App Router)** e TypeScript, utilizzando CSS nativo (Vanilla CSS) per l'estetica rétro da magazine indipendente anni '80 (colori ad alto contrasto, griglie marcate, stile risograph e caratteri monospace/grotesque).
+
 ```
-/opt/notebooklm/                                    → progetto (git)
-/opt/notebooklm/.venv/                              → ambiente Python
-/opt/notebooklm/nlm_home/profiles/default/storage_state.json  → sessione Google
-/etc/systemd/system/notebooklm-*.{service,timer}    → timer di sistema
-```
-
-### Accesso SSH a chiave (per assistenza)
-Sul Mac esiste una chiave dedicata `~/.ssh/notebooklm_vps` autorizzata sul server
-(`~/.ssh/authorized_keys`). Permette l'accesso senza password. Per revocarla,
-rimuovere la riga `claude-notebooklm-vps` da quel file sul server.
-
-### Email mittente personalizzata
-Con `onboarding@resend.dev` la mail arriva solo all'indirizzo del proprio account
-Resend. Per inviare ad altri indirizzi: verificare un dominio su Resend
-(Domains → Add) e usare un mittente tipo `redazione@tuodominio.it` in `MAIL_FROM`.
+app/
+├── articolo/[slug]/
+│   ├── page.tsx               # Pagina dell'articolo singolo (Deep-link)
+│   └── opengraph-image.tsx    # Generazione dinamica al volo dell'immagine OG
+├── categoria/[categoria]/
+│   └── page.tsx               # Articoli filtrati per categoria
+├── feed.xml/
+│   └── route.ts               # Endpoint RSS per AI e lettori feed
+├── llms.txt/
+│   └── route.ts               # Mappa del sito testuale per i motori AI (GEO)
+├── globals.css                # CSS principale, variabili di colore e layout
+├── layout.tsx                 # Layout globale del sito
+├── page.tsx                   # Homepage (carica e renderizza i Miller Columns)
+├── MillerColumns.tsx          # Componente interattivo a tre colonne (Desktop & Mobile)
+├── ArticleCover.tsx           # Renderizza la copertina dell'articolo (o il risograph fallback)
+├── Ticker.tsx                 # News ticker scorrevole in alto
+├── Scramble.tsx               # Effetto testo vintage "scrambled" all'hover
+└── ThemeToggle.tsx            # Bottone di cambio modalità Chiara/Scura
+lib/
+├── notion.ts                  # Query a Notion API e gestione delle cache Next.js
+├── parse.ts                   # Logica di split ed estrazione dei blocchi SEO
+├── categoryColor.ts           # Mappa i colori ad ogni categoria o li genera stabilmente
+├── site.ts                    # Metadati globali del sito (nome, URL, autore)
+└── related.ts                 # Algoritmo di selezione degli articoli correlati
 ```
 
 ---
 
-## 9. Cruscotto Notion
+### 🗂️ Layout Interattivo: Three-Tier Miller Columns
+La navigazione in homepage si basa sul layout **Miller Columns** (`app/MillerColumns.tsx`), strutturato in 3 colonne:
+1. **Colonna 1 (Categorie)**: Elenco di tutte le categorie editoriali presenti.
+2. **Colonna 2 (Articoli)**: Lista degli articoli appartenenti alla categoria selezionata.
+3. **Colonna 3 (Reader)**: L'articolo completo selezionato per la lettura.
 
-Oltre all'email, ogni news del brief finisce come **riga** in un database Notion
-("Kanri — Redazione"). Spuntando la casella **✅ Scrivi articolo**, il sistema genera
-un articolo completo (articolo + SEO + social + immagini) e lo scrive **dentro
-la pagina Notion**, mettendo poi **Stato = Fatto**.
+#### ⚙️ Gestione della History e URL Condivisibili
+Per evitare che la navigazione ad una sola pagina comprometta la UX (come i tasti "Avanti/Indietro" del browser), il componente Miller Columns implementa la sincronizzazione manuale degli URL:
+* Quando un utente seleziona un articolo, lo script esegue `window.history.pushState` impostando il parametro URL `?a=<slug>`.
+* Questo rende l'URL immediatamente condivisibile e permette all'utente di usare il tasto "Indietro" per chiudere l'articolo, tornando all'elenco.
+* Un listener sull'evento `popstate` intercetta i movimenti della cronologia del browser e riallinea lo stato di React (`syncFromUrl`), garantendo una UX fluida.
+* **Ottimizzazione Mobile**: Su schermi piccoli il layout si riduce ad una sola colonna visibile alla volta tramite l'attributo `data-level` (0 = Categorie, 1 = Articoli, 2 = Lettura), offrendo bottoni di ritorno stile app nativa.
 
-🔗 Database: https://app.notion.com/p/234c80b5af8546f38b1b1fc866b876f1
+---
 
-### Flusso d'uso
-```
-Brief 07:00  →  righe nel database  →  spunti ✅ le news che vuoi
-   →  entro ~5 min l'articolo appare nella pagina  →  Stato = Fatto
-```
+### 🎨 Copertina Risograph Halftone Dinamica (`ArticleCover.tsx`)
+Quando un articolo non ha un'immagine di copertina caricata su Notion, il sistema genera un placeholder grafico on-brand altamente rifinito:
+* Calcola un colore di sfondo deterministico per la categoria e un angolo di rotazione stabile a partire dal titolo dell'articolo (`lib/categoryColor.ts`).
+* Renderizza sovrapposizioni CSS di filtri halftone (retino di stampa) e linee di scansione della fotocopiatrice che scorrono in loop.
+* Il titolo dell'articolo riceve un effetto di sdoppiamento RGB (cromia fuori registro) che si anima delicatamente per simulare la stampa analogica.
 
-### Pezzi tecnici
-- `notion_sync.py` — parla con l'API Notion (crea righe, legge spunte, scrive articoli)
-- `notion_watcher.py` — controllore: cerca le spunte e genera gli articoli
-- `notebooklm-watcher.timer` — lo lancia ogni 5 minuti
-- `approfondisci.py` — genera il "kit articolo" (usato anche a mano via email)
+---
 
-### Generare un articolo a mano (senza Notion)
-```bash
-cd /opt/notebooklm && set -a && . ./notebooklm.env && set +a && \
-  NOTEBOOKLM_HOME=/opt/notebooklm/nlm_home .venv/bin/python approfondisci.py "la tua news"
-```
+### ⚡ Strategia di Caching, Fetching e Rigenerazione (ISR)
+Per garantire tempi di risposta fulminei (Core Web Vitals eccellenti) senza saturare i limiti dell'API di Notion:
+1. **SSG a Build Time**: Il caricamento di tutti gli articoli avviene principalmente a build time.
+2. **Next Data Cache**: In produzione, la funzione `loadArticlesCached` in `lib/notion.ts` avvolge le query in `unstable_cache` con un tag `"articles"` e revalidation impostata a 60 secondi.
+3. **React `cache()`**: Utilizzato per deduplicare chiamate ripetute nello stesso ciclo di rendering della pagina.
+4. **Deploy in tempo reale (Instant Rebuild)**: Su Vercel è configurato un **Deploy Hook**. Quando una notizia viene impostata su `Pubblica = true` in Notion, un'automazione (o una chiamata manuale) effettua una chiamata `POST` a tale hook. Vercel avvia un rebuild parziale rivalidando i dati di Notion, rendendo l'articolo istantaneamente online.
 
-### Lanciare il controllore Notion a mano
-```bash
-systemctl start notebooklm-watcher.service
-journalctl -u notebooklm-watcher.service -f
-```
+---
 
-### Token Notion
-Serve un'integrazione interna Notion (token `ntn_...`) salvata in `notebooklm.env`
-come `NOTION_TOKEN`, e il database condiviso con quell'integrazione
-(database → ••• → Connections). `NOTION_DB_ID` è l'ID del database.
+## 🔍 4. Strategia SEO (Search Engine) & GEO (Generative Engine)
+
+Il sito è fortemente ottimizzato sia per l'indicizzazione classica di Google sia per l'estrazione da parte dei motori AI (ChatGPT, Perplexity, Gemini, Claude).
+
+| Ottimizzazione | File / Rotta | Scopo / Dettagli |
+|:---|:---|:---|
+| **Metadati Dinamici** | `generateMetadata` in `[slug]/page.tsx` | Estrae titolo SEO, meta description e tag dal blocco Notion `## SEO` impostando il link canonical corretto. |
+| **Open Graph Images** | `[slug]/opengraph-image.tsx` | Genera dinamicamente al volo a livello server l'immagine di anteprima sociale per ogni articolo, includendo titolo e categoria. |
+| **Sitemap XML** | `/sitemap.ts` | Genera l'indice dinamico degli URL per facilitare lo spidering di Google. |
+| **Robots.txt** | `/robots.ts` | Consente l'accesso a tutti i crawler (compresi i crawler di addestramento AI). |
+| **Feed RSS** | `/feed.xml/route.ts` | Genera un feed XML valido contenente tutti gli articoli ordinati per data, ideale per aggregatori di notizie e feed AI. |
+| **JSON-LD Strutturati** | `lib/jsonld.tsx` | Inserisce dati strutturati ricchi (Schema.org) quali `NewsArticle`, `BreadcrumbList`, `CollectionPage` e `WebSite` per abilitare i rich snippet su Google. |
+| **llms.txt (GEO)** | `/llms.txt/route.ts` | Fornisce una mappa di navigazione in testo semplice (Markdown leggero) ottimizzata per i LLM (standard `llmstxt.org`). Permette agli agenti AI di comprendere istantaneamente la struttura e citare le fonti degli articoli di KANRI. |
+
+---
+
+## 🛠️ Flusso Operativo per Modifiche al Codice
+
+### 💻 Frontend (Next.js)
+1. Esegui lo sviluppo locale nella cartella `/Siti/blog`:
+   ```bash
+   npm install
+   npm run dev
+   ```
+2. Effettua le modifiche ai componenti React o al file `globals.css`.
+3. Committa le modifiche e inviale a GitHub:
+   ```bash
+   git add .
+   git commit -m "Aggiorna design Miller Columns"
+   git push origin main
+   ```
+4. Vercel rileverà il push sulla branca principale e avvierà automaticamente il deploy in produzione.
+
+### 🤖 Backend (Automazione su VPS)
+1. Modifica i file sul computer locale (es. aggiornando `article_instructions.txt` o `kanri_feeds.txt`).
+2. Invia i file modificati al repository GitHub:
+   ```bash
+   git add .
+   git commit -m "Aggiorna istruzioni di scrittura articoli"
+   git push origin main
+   ```
+3. Collegati alla VPS e scarica i file aggiornati:
+   ```bash
+   ssh root@217.160.100.63
+   cd /opt/notebooklm && git pull
+   ```
+4. Se hai modificato file in `vps/` (come timer o servizi di systemd), ricarica la configurazione del sistema:
+   ```bash
+   cp /opt/notebooklm/vps/notebooklm-*.timer /opt/notebooklm/vps/notebooklm-*.service /etc/systemd/system/
+   systemctl daemon-reload
+   systemctl restart notebooklm-watcher.timer
+   ```

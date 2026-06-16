@@ -3,3 +3,6 @@
 # Playwright serve solo per il `notebooklm login` iniziale, che fai in locale.
 notebooklm-py>=0.6.0
 feedparser>=6.0
+# Podcast settimanale: TTS gratuito (voci neurali Edge) + upload audio su Internet Archive.
+edge-tts>=6.1
+internetarchive>=3.5

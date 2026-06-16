@@ -86,16 +86,21 @@ def alert(subject, text):
         pass
 
 
-def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None):
-    """Genera testo con l'API Gemini (Google AI Studio)."""
+def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None, thinking=True):
+    """Genera testo con l'API Gemini (Google AI Studio).
+    Con thinking=False disabilita il ragionamento (i modelli 2.5 lo attivano di
+    default e consumano il budget di output, troncando la risposta)."""
     key = os.environ["GEMINI_API_KEY"]
     model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{model}:generateContent?key={key}")
+    gen_config = {"maxOutputTokens": max_tokens, "temperature": temperature}
+    if not thinking:
+        gen_config["thinkingConfig"] = {"thinkingBudget": 0}
     payload = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
-        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
+        "generationConfig": gen_config,
     }
     d = _post(url, payload, {}, 180)
     cands = d.get("candidates", [])
@@ -105,11 +110,11 @@ def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None):
     return "".join(p.get("text", "") for p in parts)
 
 
-def article_llm(system, user, max_tokens=8000, temperature=0.6):
+def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True):
     """Scrive l'articolo: usa Gemini se la chiave c'e', altrimenti OpenRouter."""
     if os.environ.get("GEMINI_API_KEY"):
         try:
-            txt = gemini_chat(system, user, max_tokens, temperature)
+            txt = gemini_chat(system, user, max_tokens, temperature, thinking=thinking)
             if txt and txt.strip():
                 return txt
         except Exception as e:
@@ -199,6 +204,153 @@ def extract_json(text):
     if cands:
         return cands[-1]
     raise ValueError("nessun JSON valido trovato nell'output LLM")
+
+
+# ---------- TTS (edge-tts: voci neurali gratuite di Microsoft Edge) ----------
+
+def tts_edge(text, out_mp3, voice="it-IT-IsabellaNeural", rate="-4%", pitch="+0Hz"):
+    """Sintetizza `text` in un mp3 con edge-tts (gratis, nessuna API key).
+    Voci italiane utili: it-IT-IsabellaNeural, it-IT-ElsaNeural, it-IT-DiegoNeural.
+    Restituisce il percorso del file generato."""
+    import asyncio
+    import edge_tts
+
+    async def _run():
+        comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+        await comm.save(out_mp3)
+
+    asyncio.run(_run())
+    if not os.path.exists(out_mp3) or os.path.getsize(out_mp3) == 0:
+        raise RuntimeError("edge-tts non ha prodotto audio (file vuoto)")
+    return out_mp3
+
+
+# ---------- ElevenLabs (voce di alta qualità, piano free senza carta) ----------
+
+def _post_bytes(url, payload, headers, timeout=120):
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode(),
+        headers={**headers, "Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def elevenlabs_crediti_residui(api_key=None):
+    """Caratteri ancora disponibili nel mese (None se non determinabile)."""
+    key = api_key or os.environ.get("ELEVENLABS_API_KEY")
+    if not key:
+        return None
+    try:
+        req = urllib.request.Request(
+            "https://api.elevenlabs.io/v1/user/subscription",
+            headers={"xi-api-key": key})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.load(r)
+        return max(0, d.get("character_limit", 0) - d.get("character_count", 0))
+    except Exception:
+        return None
+
+
+def tts_elevenlabs(text, out_mp3, voice_id=None, model_id=None, api_key=None):
+    """Sintetizza `text` in mp3 con ElevenLabs. Le puntate sono brevi (entro il
+    limite per richiesta), quindi una sola chiamata. Restituisce il percorso."""
+    key = api_key or os.environ["ELEVENLABS_API_KEY"]
+    voice_id = voice_id or os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+    model_id = model_id or os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+    url = (f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+           f"?output_format=mp3_44100_128")
+    audio = _post_bytes(url, {"text": text, "model_id": model_id},
+                        {"xi-api-key": key})
+    with open(out_mp3, "wb") as f:
+        f.write(audio)
+    if os.path.getsize(out_mp3) == 0:
+        raise RuntimeError("ElevenLabs non ha prodotto audio (file vuoto)")
+    return out_mp3
+
+
+# ---------- Google Cloud Text-to-Speech (voci Chirp 3 HD) ----------
+
+def _split_tts(text, limit=2500):
+    """Spezza il testo in blocchi <= limit caratteri, sui confini di paragrafo
+    e, se serve, di frase. Evita di superare il limite per richiesta dell'API."""
+    blocchi, buf = [], ""
+    for para in re.split(r"\n\s*\n", text.strip()):
+        para = para.strip()
+        if not para:
+            continue
+        if len(para) > limit:
+            # paragrafo troppo lungo: spezza per frase
+            for frase in re.split(r"(?<=[.!?])\s+", para):
+                if len(buf) + len(frase) + 1 > limit and buf:
+                    blocchi.append(buf.strip())
+                    buf = ""
+                buf += frase + " "
+        elif len(buf) + len(para) + 2 > limit and buf:
+            blocchi.append(buf.strip())
+            buf = para
+        else:
+            buf = f"{buf}\n\n{para}" if buf else para
+    if buf.strip():
+        blocchi.append(buf.strip())
+    return blocchi
+
+
+def tts_google(text, out_mp3, voice="it-IT-Chirp3-HD-Aoede", language_code="it-IT",
+               api_key=None, speaking_rate=1.0):
+    """Sintetizza `text` in mp3 con Google Cloud Text-to-Speech (voci Chirp 3 HD).
+    Spezza i testi lunghi e concatena gli mp3. Restituisce il percorso del file.
+    Richiede GOOGLE_TTS_API_KEY (API 'Cloud Text-to-Speech' abilitata sul progetto)."""
+    import base64
+
+    key = api_key or os.environ["GOOGLE_TTS_API_KEY"]
+    url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={key}"
+    audio = b""
+    for blocco in _split_tts(text):
+        payload = {
+            "input": {"text": blocco},
+            "voice": {"languageCode": language_code, "name": voice},
+            "audioConfig": {"audioEncoding": "MP3", "speakingRate": speaking_rate},
+        }
+        d = _post(url, payload, {}, 120)
+        b64 = d.get("audioContent")
+        if not b64:
+            raise RuntimeError(f"Google TTS: risposta senza audio ({str(d)[:160]})")
+        audio += base64.b64decode(b64)
+    with open(out_mp3, "wb") as f:
+        f.write(audio)
+    if os.path.getsize(out_mp3) == 0:
+        raise RuntimeError("Google TTS non ha prodotto audio (file vuoto)")
+    return out_mp3
+
+
+# ---------- Internet Archive (hosting audio gratuito con API) ----------
+
+def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=None,
+                   retries=2):
+    """Carica un file su archive.org e restituisce l'URL pubblico diretto.
+    Le chiavi S3 si generano (gratis) su https://archive.org/account/s3.php
+    e vanno in ARCHIVE_ACCESS_KEY / ARCHIVE_SECRET_KEY."""
+    import internetarchive as ia
+
+    access_key = access_key or os.environ["ARCHIVE_ACCESS_KEY"]
+    secret_key = secret_key or os.environ["ARCHIVE_SECRET_KEY"]
+    fname = os.path.basename(filepath)
+    last = ""
+    for attempt in range(retries + 1):
+        try:
+            resp = ia.upload(identifier, files={fname: filepath}, metadata=metadata,
+                             access_key=access_key, secret_key=secret_key,
+                             retries=2, verbose=False)
+            bad = [r for r in resp if getattr(r, "status_code", 200) not in (200, None)]
+            if bad:
+                last = f"status {[getattr(r, 'status_code', '?') for r in bad]}"
+            else:
+                return f"https://archive.org/download/{identifier}/{fname}"
+        except Exception as e:
+            last = repr(e)[:200]
+        if attempt < retries:
+            time.sleep(20)
+    raise RuntimeError(f"upload su Internet Archive fallito: {last}")
 
 
 # ---------- Tavily ----------

@@ -1,4 +1,7 @@
 report-*.md
+brief-*.md
+kanri-audio-*.mp3
+kanri-audio-*.txt
 storage_state.json
 nlm_home/
 notebooklm.env

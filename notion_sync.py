@@ -192,6 +192,98 @@ def urls_coperti(token, db_id, days=7):
     return urls
 
 
+def _blocchi_pagina(token, page_id):
+    """Tutti i blocchi figli di una pagina (con paginazione)."""
+    blocchi, cur = [], None
+    while True:
+        path = f"/blocks/{page_id}/children?page_size=100"
+        if cur:
+            path += f"&start_cursor={cur}"
+        res = _req("GET", path, token)
+        blocchi.extend(res.get("results", []))
+        if not res.get("has_more"):
+            break
+        cur = res["next_cursor"]
+    return blocchi
+
+
+def leggi_corpo_pubblico(token, page_id, max_chars=4000):
+    """Testo semplice del corpo articolo, fermandosi al marcatore redazionale
+    `## SEO` (tutto cio' che segue e' privato). Usato per dare all'LLM il
+    contenuto reale degli articoli da riassumere nel podcast."""
+    righe = []
+    TIPI_TESTO = ("paragraph", "heading_1", "heading_2", "heading_3",
+                  "quote", "bulleted_list_item", "numbered_list_item", "callout")
+    for b in _blocchi_pagina(token, page_id):
+        t = b.get("type")
+        if t not in TIPI_TESTO:
+            continue
+        testo = "".join(r.get("plain_text", "") for r in b[t].get("rich_text", [])).strip()
+        if not testo:
+            continue
+        # i heading "SEO/SOCIAL/IMMAGINI/NOTE FONTI" segnano l'inizio della parte privata
+        if t.startswith("heading") and testo.strip("# ").upper() in (
+                "SEO", "SOCIAL", "IMMAGINI", "NOTE FONTI"):
+            break
+        righe.append(testo)
+        if sum(len(r) for r in righe) > max_chars:
+            break
+    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(righe)).strip()[:max_chars]
+
+
+def articoli_pubblicati(token, db_id, days=7, leggi_corpo=True):
+    """Articoli con `Pubblica` spuntato e `Data pubblicazione` negli ultimi `days`
+    giorni. Restituisce title/summary/categoria/slug + (opzionale) corpo testuale.
+    E' la base di partenza della puntata podcast settimanale."""
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=days)).isoformat()
+    payload = {"filter": {"and": [
+        {"property": "Pubblica", "checkbox": {"equals": True}},
+        {"property": "Data pubblicazione", "date": {"on_or_after": since}},
+    ]}, "sorts": [{"property": "Data pubblicazione", "direction": "ascending"}],
+        "page_size": 100}
+    res = _req("POST", f"/databases/{db_id}/query", token, payload)
+    out = []
+    for p in res.get("results", []):
+        props = p["properties"]
+        title = "".join(t.get("plain_text", "") for t in props["Notizia"]["title"])
+        if not title:
+            continue
+        summary = "".join(t.get("plain_text", "") for t in
+                          props.get("Di cosa parla", {}).get("rich_text", []))
+        slug = "".join(t.get("plain_text", "") for t in
+                       props.get("Slug", {}).get("rich_text", []))
+        cat = props.get("Categoria", {}).get("select")
+        corpo = leggi_corpo_pubblico(token, p["id"]) if leggi_corpo else ""
+        out.append({
+            "page_id": p["id"], "title": title.strip(), "summary": summary.strip(),
+            "categoria": cat["name"] if cat else "", "slug": slug.strip(),
+            "corpo": corpo,
+        })
+    return out
+
+
+def crea_episodio(token, podcast_db_id, ep):
+    """Crea una riga nel database Notion 'Podcast' con i metadati della puntata
+    e il copione completo nel corpo pagina. `ep` ha: titolo, data (ISO),
+    descrizione, audio_url, durata, articoli (lista di {title, slug}), copione."""
+    articoli_txt = "; ".join(a.get("title", "") for a in ep.get("articoli", []))
+    props = {
+        "Titolo": {"title": [{"text": {"content": ep["titolo"][:200]}}]},
+        "Data": {"date": {"start": ep["data"]}},
+        "Audio": {"url": ep["audio_url"]},
+        "Descrizione": {"rich_text": [{"text": {"content": ep.get("descrizione", "")[:1900]}}]},
+        "Durata": {"rich_text": [{"text": {"content": ep.get("durata", "")[:50]}}]},
+        "Articoli": {"rich_text": [{"text": {"content": articoli_txt[:1900]}}]},
+    }
+    page = _req("POST", "/pages", token,
+                {"parent": {"database_id": podcast_db_id}, "properties": props})
+    # copione completo nel corpo (utile come trascrizione/show-notes)
+    if ep.get("copione"):
+        append_markdown(token, page["id"], ep["copione"])
+    return page["id"]
+
+
 def set_cover(token, page_id, url):
     _req("PATCH", f"/pages/{page_id}", token,
          {"properties": {"Copertina": {"url": url}}})
