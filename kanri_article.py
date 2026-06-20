@@ -16,9 +16,10 @@ from pathlib import Path
 
 import kanri_engine as ke
 import notion_sync
+import config
 
 SYSTEM = (
-    "Sei la firma di KANRI, rivista di cultura visiva e sonora. Scrivi in modo "
+    f"Sei la firma di {config.BRAND}, {config.FIRMA}. Scrivi in modo "
     "CHIARO, SOBRIO e professionale: vai dritto al punto, informa bene, con prosa "
     "curata ma SENZA voli letterari, enfasi o teatralità. Niente aggettivi gonfi, "
     "niente metafore forzate, niente scene poetiche. Tono competente e misurato, "
@@ -188,7 +189,7 @@ def genera_articolo(titolo, contesto="", fonte_url="", categoria="", exclude_id=
             righe = "\n".join(f'- [{c["title"]}](/articolo/{c["slug"]})' for c in correlati)
             link_block = (
                 "--- ARTICOLI CORRELATI (per i LINK INTERNI) ---\n"
-                "Questi sono articoli KANRI già pubblicati. Se — e SOLO se — uno è "
+                f"Questi sono articoli {config.BRAND} già pubblicati. Se — e SOLO se — uno è "
                 "davvero pertinente al tema, inserisci un link interno nel corpo usando "
                 "ESATTAMENTE il markdown qui sotto (max 2-3 link, in modo naturale). "
                 "Se nessuno è pertinente, NON metterne. NON inventare altri link interni.\n"
@@ -203,7 +204,7 @@ def genera_articolo(titolo, contesto="", fonte_url="", categoria="", exclude_id=
         f"IGNORALA del tutto.\n\n{blocchi}\n{nota_orig}\n"
         f"--- ISTRUZIONI DI FORMATO (rispettale alla lettera) ---\n{formato}\n\n"
         f"Scrivi UN SOLO articolo originale in italiano che SINTETIZZA le fonti "
-        f"PERTINENTI (non copiarle), con angolo editoriale KANRI. Cita i fatti e, "
+        f"PERTINENTI (non copiarle), con angolo editoriale {config.BRAND}. Cita i fatti e, "
         f"nella sezione NOTE FONTI, elenca SOLO le fonti realmente usate (titolo + link)."
     )
     out = ke.article_llm(SYSTEM, user, max_tokens=8000, temperature=0.6)

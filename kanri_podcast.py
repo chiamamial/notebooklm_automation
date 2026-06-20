@@ -30,8 +30,11 @@ from pathlib import Path
 
 import kanri_engine as ke
 import notion_sync
+import config
 from daily_research import send_email
 
+PODCAST_NOME = config.get("podcast.nome", f"{config.BRAND} Tape")
+PODCAST_SLUG = config.get("podcast.slug", "kanri-tape")
 VOCE_GOOGLE_DEFAULT = "it-IT-Chirp3-HD-Aoede"
 VOCE_EDGE_DEFAULT = "it-IT-IsabellaNeural"
 # Tetto caratteri per puntata: protegge la quota mensile di ElevenLabs free
@@ -107,7 +110,7 @@ def costruisci_prompt(articoli, settimana):
     return (f"Settimana di riferimento: {settimana}.\n"
             f"Numero di articoli pubblicati: {len(articoli)}.\n\n"
             f"Ecco i materiali (usa SOLO queste informazioni):\n\n{materiali}\n\n"
-            f"Scrivi il copione della puntata di KANRI Tape seguendo le istruzioni.")
+            f"Scrivi il copione della puntata di {PODCAST_NOME} seguendo le istruzioni.")
 
 
 def stima_durata(testo):
@@ -150,8 +153,8 @@ def main():
     print(f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})", flush=True)
 
     # 2. audio (voce)
-    mp3 = Path(f"kanri-tape-{oggi.isoformat()}.mp3")
-    voce_mp3 = Path(f"kanri-tape-{oggi.isoformat()}.voce.mp3")
+    mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.mp3")
+    voce_mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.voce.mp3")
     voce = genera_audio(copione, str(voce_mp3))
     print(f"TTS: voce generata ({voce_mp3.stat().st_size // 1024} KB) con {voce}", flush=True)
 
@@ -168,17 +171,17 @@ def main():
         print("  (ffmpeg o traccia assenti: nessun sottofondo, uso la sola voce)", flush=True)
 
     # 3. upload su Internet Archive
-    titolo = f"KANRI Tape — {settimana}"
-    identifier = f"kanri-tape-{oggi.isoformat()}"
-    descrizione = ("KANRI Tape, il punto settimanale di KANRI, rivista indipendente "
-                   f"di arte, design e cultura visiva. Gli articoli pubblicati nella settimana {settimana}.")
+    titolo = f"{PODCAST_NOME} — {settimana}"
+    identifier = f"{PODCAST_SLUG}-{oggi.isoformat()}"
+    descrizione = (f"{PODCAST_NOME}, il punto settimanale di {config.BRAND}, "
+                   f"{config.DESCRIZIONE}. Gli articoli pubblicati nella settimana {settimana}.")
     audio_url = ""
     if os.environ.get("ARCHIVE_ACCESS_KEY"):
         meta = {
             "title": titolo,
             "mediatype": "audio",
             "collection": os.environ.get("ARCHIVE_COLLECTION", "opensource_audio"),
-            "creator": "KANRI",
+            "creator": config.BRAND,
             "subject": "design; arte; cultura visiva; podcast",
             "language": "ita",
             "date": oggi.isoformat(),
@@ -203,12 +206,12 @@ def main():
         print("  (PODCAST_DB_ID non impostata: salto il salvataggio su Notion)", flush=True)
 
     # 5. email di notifica con copione in allegato
-    txt = Path(f"kanri-tape-{oggi.isoformat()}.txt")
+    txt = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.txt")
     txt.write_text(copione, encoding="utf-8")
     corpo_mail = (f"# {titolo}\n\nDurata stimata: {durata}\n"
                   f"Articoli: {len(articoli)}\n"
                   f"Audio: {audio_url or '(upload saltato)'}\n\n---\n\n{copione}")
-    send_email(f"🎙️ KANRI Tape — {settimana}", corpo_mail, str(txt))
+    send_email(f"🎙️ {PODCAST_NOME} — {settimana}", corpo_mail, str(txt))
 
 
 def _pulisci_copione(testo):
@@ -234,7 +237,7 @@ if __name__ == "__main__":
                 print("Podcast fallito, riprovo tra 120s...", flush=True)
                 time.sleep(120)
                 continue
-            ke.alert(f"⚠️ KANRI Audio FALLITO — {date.today().isoformat()}",
+            ke.alert(f"⚠️ {PODCAST_NOME} FALLITO — {date.today().isoformat()}",
                      "La puntata podcast settimanale non è stata generata dopo 2 tentativi.\n\n"
                      + traceback.format_exc())
             raise

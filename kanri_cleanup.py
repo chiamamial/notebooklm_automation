@@ -15,6 +15,7 @@ from datetime import date
 
 import notion_sync
 import kanri_engine as ke
+import config
 
 
 def main():
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception:
-        ke.alert(f"⚠️ Pulizia KANRI FALLITA — {date.today().isoformat()}",
+        ke.alert(f"⚠️ Pulizia {config.BRAND} FALLITA — {date.today().isoformat()}",
                  "La pulizia automatica delle news scadute è fallita.\n\n"
                  + traceback.format_exc())
         raise

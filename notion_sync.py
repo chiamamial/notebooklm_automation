@@ -20,10 +20,9 @@ import urllib.error
 API = "https://api.notion.com/v1"
 VERSION = "2022-06-28"
 
-ALLOWED_CATS = [
-    "Design del Prodotto", "Graphic Design", "Fotografia",
-    "Musica Elettronica", "Storia del Design",
-]
+import config
+
+ALLOWED_CATS = config.CATEGORIE_NOMI
 # match robusto: chiave senza spazi/punteggiatura -> nome esatto
 _CAT_MAP = {re.sub(r"[^a-z0-9]", "", c.lower()): c for c in ALLOWED_CATS}
 

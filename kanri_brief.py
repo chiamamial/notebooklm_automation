@@ -13,41 +13,29 @@ from pathlib import Path
 
 import kanri_engine as ke
 import notion_sync
+import config
 from daily_research import send_email
 
-CATEGORIE = """- Design del Prodotto: oggetti, mobili, lighting, ceramiche, homeware, prodotti
-  industriali, design scultoreo/materico, collaborazioni designer×brand.
-- Graphic Design: identità visive, tipografia, poster, editoria, packaging,
-  branding, interfacce/UI, layout e grafica in genere.
-- Fotografia: fotografia, reportage, ritratto, arte visiva, installazioni,
-  immagini ad alto impatto.
-- Musica Elettronica: musica elettronica e sound design, techno/house, uscite,
-  produzione, analisi del suono.
-- Storia del Design: maestri storici del design e della grafica, riscoperte,
-  archivi, metodologie e processi."""
+CATEGORIE = config.CATEGORIE_TESTO
 
 SYSTEM = (
-    "Sei il caporedattore di KANRI, rivista indipendente di cultura visiva e "
-    "sonora. Selezioni solo notizie forti, fresche e visivamente raccontabili, "
-    "coerenti con le 5 verticali editoriali. Rispondi sempre e solo in italiano."
+    f"Sei il caporedattore di {config.BRAND}, {config.DESCRIZIONE}. "
+    "Selezioni solo notizie forti, fresche e visivamente raccontabili, "
+    "coerenti con le verticali editoriali. Rispondi sempre e solo in italiano."
 )
 
-
-# Domini dei feed di musica elettronica / cultura sonora: la passata "musica"
-# pesca SOLO da questi, così la quota è garantita anche con la priorità su design.
-MUSICA_DOMINI = {
-    "attackmagazine.com", "cdm.link", "xlr8r.com", "daily.bandcamp.com",
-    "thequietus.com", "djmag.com", "theransomnote.com", "909originals.com",
-    "inverted-audio.com", "factmag.com",
-}
+# Domini dei feed musicali: la passata "musica" pesca SOLO da questi (config).
+MUSICA_DOMINI = set(config.get("brief.musica_domini", []))
+CATEGORIA_MUSICA = config.get("brief.categoria_musica", "Musica Elettronica")
+_PRIORITA = config.get("priorita", [])
 
 FOCUS_GENERALE = (
-    "Seleziona le notizie PIÙ interessanti per KANRI (scarta gossip, tech "
-    "generalista, pubblicità, doppioni).\n"
-    "PRIORITÀ EDITORIALE: soprattutto PRODUCT DESIGN e GRAPHIC DESIGN; il resto "
-    "Fotografia o Storia del Design.\n"
-    "NON selezionare notizie di musica elettronica: sono gestite in una passata "
-    "separata."
+    f"Seleziona le notizie PIÙ interessanti per {config.BRAND} (scarta gossip, "
+    "tech generalista, pubblicità, doppioni).\n"
+    + (f"PRIORITÀ EDITORIALE: soprattutto {' e '.join(_PRIORITA)}; "
+       "il resto le altre categorie.\n" if _PRIORITA else "")
+    + (f"NON selezionare notizie di '{CATEGORIA_MUSICA}': sono gestite in una "
+       "passata separata." if MUSICA_DOMINI else "")
 )
 
 FOCUS_MUSICA = (
@@ -55,7 +43,7 @@ FOCUS_MUSICA = (
     "Seleziona SOLO le più forti e attinenti a MUSICA ELETTRONICA / sound design "
     "/ club culture (techno, house, ambient, sperimentale; uscite, produzione, "
     "attrezzatura, scena, ritratti d'artista). Scarta ciò che non è musica "
-    "elettronica. Per 'categoria' usa sempre 'Musica Elettronica'."
+    f"elettronica. Per 'categoria' usa sempre '{CATEGORIA_MUSICA}'."
 )
 
 
@@ -66,7 +54,7 @@ def costruisci_prompt(items, n, focus):
 
 {chr(10).join(righe)}
 
-Le 5 categorie di KANRI:
+Le categorie di {config.BRAND}:
 {CATEGORIE}
 
 {focus}
@@ -78,10 +66,9 @@ fonte non ancora usata.
 Per ognuna restituisci un oggetto JSON:
 - "idx": l'indice della news nell'elenco
 - "titolo": un titolo in stile magazine, in italiano (riscritto, accattivante)
-- "categoria": ESATTAMENTE una tra: Design del Prodotto, Graphic Design,
-  Fotografia, Musica Elettronica, Storia del Design
+- "categoria": ESATTAMENTE una tra: {", ".join(config.CATEGORIE_NOMI)}
 - "di_cosa_parla": 3-4 frasi in italiano che spiegano bene la notizia
-- "perche": una frase sul perché interessa al lettore di KANRI
+- "perche": una frase sul perché interessa al lettore di {config.BRAND}
 
 Rispondi SOLO con un array JSON di {n} oggetti, niente altro."""
 
@@ -130,12 +117,14 @@ def aggiungi(scelte, fonte_items, notizie, righe_md, visti):
 def main():
     today = date.today().isoformat()
     feeds = Path(__file__).parent / "kanri_feeds.txt"
-    totale = int(os.environ.get("BRIEF_TOTALE", "7"))
-    musica_target = int(os.environ.get("BRIEF_MUSICA", "2"))
+    totale = int(os.environ.get("BRIEF_TOTALE", str(config.get("brief.totale", 7))))
+    musica_target = int(os.environ.get("BRIEF_MUSICA", str(config.get("brief.musica", 2))))
 
     # cap basso per feed (no monopolio di chi pubblica tantissimo, es. Dezeen)
     # e finestra ampia (i feed lenti, es. Giappone, fanno comunque in tempo).
-    items = ke.fetch_rss_items(str(feeds), max_age_days=7, per_feed=4)
+    items = ke.fetch_rss_items(str(feeds),
+                               max_age_days=config.get("brief.max_age_days", 7),
+                               per_feed=config.get("brief.per_feed", 4))
     print(f"RSS: {len(items)} news raccolte", flush=True)
 
     # anti-ripetizione: scarta le news gia' coperte negli ultimi 7 giorni
@@ -165,7 +154,7 @@ def main():
     print(f"LLM generale: {len(scelte_altri)} news", flush=True)
 
     # costruisci gli item per Notion + il corpo email
-    notizie, righe_md, visti = [], ["# Brief KANRI — " + today, ""], set()
+    notizie, righe_md, visti = [], [f"# Brief {config.BRAND} — " + today, ""], set()
     aggiungi(scelte_musica, musica, notizie, righe_md, visti)
     aggiungi(scelte_altri, altri, notizie, righe_md, visti)
 
@@ -176,7 +165,7 @@ def main():
 
     # email
     body = "\n".join(righe_md)
-    send_email(f"🗞️ Brief KANRI {today} — {len(notizie)} news", body,
+    send_email(f"🗞️ Brief {config.BRAND} {today} — {len(notizie)} news", body,
                _scrivi_file(today, body))
 
 
@@ -201,7 +190,7 @@ if __name__ == "__main__":
                 print("Brief fallito, riprovo tra 120s...", flush=True)
                 time.sleep(120)
                 continue
-            ke.alert(f"⚠️ Brief KANRI FALLITO — {_date.today().isoformat()}",
+            ke.alert(f"⚠️ Brief {config.BRAND} FALLITO — {_date.today().isoformat()}",
                      "Il brief di oggi non è stato generato dopo 2 tentativi.\n\n"
                      + traceback.format_exc())
             raise
