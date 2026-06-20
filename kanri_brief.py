@@ -7,6 +7,7 @@ Sostituisce la "ricerca delle 07:00" basata su NotebookLM.
 """
 
 import os
+import random
 from datetime import date
 from pathlib import Path
 
@@ -51,6 +52,9 @@ DESIGN. Delle 7 news, ALMENO 4-5 devono essere di "Design del Prodotto" o
 "Graphic Design". Le restanti 2-3 coprono Fotografia / Musica Elettronica /
 Storia del Design. Se non ci sono abbastanza news product/graphic forti, riempi
 con le altre categorie, ma privilegia sempre quelle due.
+DIVERSIFICA LE FONTI: non scegliere più di 2 notizie dalla stessa testata
+(guarda la fonte tra parentesi tonde). A parità di interesse, preferisci una
+notizia da una fonte non ancora usata, così da variare le testate.
 
 Per ognuna restituisci un oggetto JSON:
 - "idx": l'indice della news nell'elenco
@@ -67,7 +71,9 @@ def main():
     today = date.today().isoformat()
     feeds = Path(__file__).parent / "kanri_feeds.txt"
 
-    items = ke.fetch_rss_items(str(feeds), max_age_days=4, per_feed=8)
+    # cap basso per feed (no monopolio di chi pubblica tantissimo, es. Dezeen)
+    # e finestra ampia (i feed lenti, es. Giappone, fanno comunque in tempo).
+    items = ke.fetch_rss_items(str(feeds), max_age_days=7, per_feed=4)
     print(f"RSS: {len(items)} news raccolte", flush=True)
 
     # anti-ripetizione: scarta le news gia' coperte negli ultimi 7 giorni
@@ -78,6 +84,9 @@ def main():
         print(f"  dopo anti-ripetizione: {len(items)} news nuove ({len(coperti)} gia' coperte)", flush=True)
     if not items:
         raise SystemExit("nessuna news nuova dai feed")
+
+    # mescola: l'ordine dei feed non deve influenzare la scelta dell'LLM
+    random.shuffle(items)
 
     scelte = ke.llm_json(
         [{"role": "system", "content": SYSTEM},
