@@ -46,7 +46,7 @@ I segreti e i parametri runtime stanno in `notebooklm.env` (non versionato): ved
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"      # runtime + ruff + pytest
+pip install -r requirements.txt ruff pytest   # runtime + tooling
 
 ruff check .                 # lint
 ruff format .                # formattazione
