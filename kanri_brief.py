@@ -33,28 +33,47 @@ SYSTEM = (
 )
 
 
-def costruisci_prompt(items):
-    righe = []
-    for i, it in enumerate(items):
-        righe.append(f'[{i}] ({it["source"]}) {it["title"]} :: {it["summary"][:160]}')
-    elenco = "\n".join(righe)
-    return f"""Ecco le news di oggi dai feed (indice tra parentesi quadre):
+# Domini dei feed di musica elettronica / cultura sonora: la passata "musica"
+# pesca SOLO da questi, così la quota è garantita anche con la priorità su design.
+MUSICA_DOMINI = {
+    "attackmagazine.com", "cdm.link", "xlr8r.com", "daily.bandcamp.com",
+    "thequietus.com", "djmag.com", "theransomnote.com", "909originals.com",
+    "inverted-audio.com", "factmag.com",
+}
 
-{elenco}
+FOCUS_GENERALE = (
+    "Seleziona le notizie PIÙ interessanti per KANRI (scarta gossip, tech "
+    "generalista, pubblicità, doppioni).\n"
+    "PRIORITÀ EDITORIALE: soprattutto PRODUCT DESIGN e GRAPHIC DESIGN; il resto "
+    "Fotografia o Storia del Design.\n"
+    "NON selezionare notizie di musica elettronica: sono gestite in una passata "
+    "separata."
+)
+
+FOCUS_MUSICA = (
+    "Queste news vengono da testate di musica elettronica e cultura sonora. "
+    "Seleziona SOLO le più forti e attinenti a MUSICA ELETTRONICA / sound design "
+    "/ club culture (techno, house, ambient, sperimentale; uscite, produzione, "
+    "attrezzatura, scena, ritratti d'artista). Scarta ciò che non è musica "
+    "elettronica. Per 'categoria' usa sempre 'Musica Elettronica'."
+)
+
+
+def costruisci_prompt(items, n, focus):
+    righe = [f'[{i}] ({it["source"]}) {it["title"]} :: {it["summary"][:160]}'
+             for i, it in enumerate(items)]
+    return f"""Ecco le news dai feed (indice tra parentesi quadre):
+
+{chr(10).join(righe)}
 
 Le 5 categorie di KANRI:
 {CATEGORIE}
 
-Seleziona le 7 notizie PIÙ interessanti per KANRI (scarta gossip, tech
-generalista, pubblicità, e i doppioni).
-PRIORITÀ EDITORIALE: KANRI è focalizzata soprattutto su PRODUCT DESIGN e GRAPHIC
-DESIGN. Delle 7 news, ALMENO 4-5 devono essere di "Design del Prodotto" o
-"Graphic Design". Le restanti 2-3 coprono Fotografia / Musica Elettronica /
-Storia del Design. Se non ci sono abbastanza news product/graphic forti, riempi
-con le altre categorie, ma privilegia sempre quelle due.
+{focus}
+
 DIVERSIFICA LE FONTI: non scegliere più di 2 notizie dalla stessa testata
 (guarda la fonte tra parentesi tonde). A parità di interesse, preferisci una
-notizia da una fonte non ancora usata, così da variare le testate.
+fonte non ancora usata.
 
 Per ognuna restituisci un oggetto JSON:
 - "idx": l'indice della news nell'elenco
@@ -64,12 +83,55 @@ Per ognuna restituisci un oggetto JSON:
 - "di_cosa_parla": 3-4 frasi in italiano che spiegano bene la notizia
 - "perche": una frase sul perché interessa al lettore di KANRI
 
-Rispondi SOLO con un array JSON di 7 oggetti, niente altro."""
+Rispondi SOLO con un array JSON di {n} oggetti, niente altro."""
+
+
+def seleziona(items, n, focus):
+    """Una passata di scrematura LLM: sceglie fino a `n` news da `items`."""
+    if not items or n <= 0:
+        return []
+    n = min(n, len(items))
+    scelte = ke.llm_json(
+        [{"role": "system", "content": SYSTEM},
+         {"role": "user", "content": costruisci_prompt(items, n, focus)}],
+        max_tokens=8000, temperature=0.5)
+    return scelte or []
+
+
+def aggiungi(scelte, fonte_items, notizie, righe_md, visti):
+    """Trasforma le scelte LLM in righe Notion + blocchi email (dedup per URL)."""
+    for s in scelte:
+        if not isinstance(s, dict):
+            continue
+        idx = s.get("idx")
+        if not (isinstance(idx, int) and 0 <= idx < len(fonte_items)):
+            continue
+        src = fonte_items[idx]
+        url = src.get("url", "").rstrip("/")
+        if url and url in visti:
+            continue
+        visti.add(url)
+        cat = notion_sync.normalizza_categoria(s.get("categoria", ""))
+        fonte = f'{src.get("source", "")} ({src.get("url", "")})'.strip()
+        notizie.append({
+            "title": s.get("titolo", src.get("title", ""))[:200],
+            "summary": s.get("di_cosa_parla", "")[:1900],
+            "categoria": cat,
+            "fonte": fonte[:1900],
+        })
+        righe_md += [
+            f'## {s.get("titolo", "")}',
+            f'- **Di cosa parla:** {s.get("di_cosa_parla", "")}',
+            f'- **Perché pubblicarlo:** {s.get("perche", "")}',
+            f'- **Categoria:** {cat or "—"}',
+            f'- **Fonte:** {fonte}', ""]
 
 
 def main():
     today = date.today().isoformat()
     feeds = Path(__file__).parent / "kanri_feeds.txt"
+    totale = int(os.environ.get("BRIEF_TOTALE", "7"))
+    musica_target = int(os.environ.get("BRIEF_MUSICA", "2"))
 
     # cap basso per feed (no monopolio di chi pubblica tantissimo, es. Dezeen)
     # e finestra ampia (i feed lenti, es. Giappone, fanno comunque in tempo).
@@ -88,36 +150,26 @@ def main():
     # mescola: l'ordine dei feed non deve influenzare la scelta dell'LLM
     random.shuffle(items)
 
-    scelte = ke.llm_json(
-        [{"role": "system", "content": SYSTEM},
-         {"role": "user", "content": costruisci_prompt(items)}],
-        max_tokens=8000, temperature=0.5)
-    print(f"LLM: {len(scelte)} news selezionate", flush=True)
+    # split del pool: musica elettronica vs tutto il resto
+    musica = [it for it in items if it.get("source") in MUSICA_DOMINI]
+    altri = [it for it in items if it.get("source") not in MUSICA_DOMINI]
+    print(f"  pool: {len(musica)} musica elettronica / {len(altri)} altri", flush=True)
+
+    # PASSATA 1 — quota garantita di musica elettronica
+    n_musica = min(musica_target, len(musica))
+    scelte_musica = seleziona(musica, n_musica, FOCUS_MUSICA)
+    print(f"LLM musica: {len(scelte_musica)} news", flush=True)
+
+    # PASSATA 2 — il resto (design/foto/storia), per arrivare a `totale`
+    scelte_altri = seleziona(altri, totale - n_musica, FOCUS_GENERALE)
+    print(f"LLM generale: {len(scelte_altri)} news", flush=True)
 
     # costruisci gli item per Notion + il corpo email
-    notizie, righe_md = [], ["# Brief KANRI — " + today, ""]
-    for s in scelte:
-        if not isinstance(s, dict):
-            continue
-        idx = s.get("idx")
-        src = items[idx] if isinstance(idx, int) and 0 <= idx < len(items) else {}
-        cat = notion_sync.normalizza_categoria(s.get("categoria", ""))
-        fonte = f'{src.get("source", "")} ({src.get("url", "")})'.strip()
-        notizie.append({
-            "title": s.get("titolo", src.get("title", ""))[:200],
-            "summary": s.get("di_cosa_parla", "")[:1900],
-            "categoria": cat,
-            "fonte": fonte[:1900],
-        })
-        righe_md += [
-            f'## {s.get("titolo", "")}',
-            f'- **Di cosa parla:** {s.get("di_cosa_parla", "")}',
-            f'- **Perché pubblicarlo:** {s.get("perche", "")}',
-            f'- **Categoria:** {cat or "—"}',
-            f'- **Fonte:** {fonte}', ""]
+    notizie, righe_md, visti = [], ["# Brief KANRI — " + today, ""], set()
+    aggiungi(scelte_musica, musica, notizie, righe_md, visti)
+    aggiungi(scelte_altri, altri, notizie, righe_md, visti)
 
     # scrivi su Notion
-    nt, ndb = os.environ.get("NOTION_TOKEN"), os.environ.get("NOTION_DB_ID")
     if nt and ndb:
         n = notion_sync.add_news_rows(nt, ndb, notizie, today)
         print(f"Notion: {n} news aggiunte", flush=True)

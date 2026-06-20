@@ -123,7 +123,7 @@ Caption proposta per i social...
 Gli script di automazione risiedono nella cartella `/opt/notebooklm` su una VPS Ubuntu 24.04 (`217.160.100.63`) e sono orchestrati da **systemd timers**.
 
 ### 📂 Struttura dei File della VPS
-* `kanri_brief.py`: Esegue la scansione RSS mattutina, seleziona le 7 notizie migliori tramite OpenRouter LLM, crea le righe in Notion come "Da fare" e invia l'email del brief via Resend.
+* `kanri_brief.py`: Esegue la scansione RSS mattutina e seleziona le notizie con **due passate** LLM: una dedicata alla **musica elettronica** (quota garantita, default 2, via `BRIEF_MUSICA`) dai soli feed musicali, e una **generale** per il resto fino a `BRIEF_TOTALE` (default 7), con priorità su product/graphic design. Cap basso per feed e finestra di 7 giorni per variare le fonti. Crea le righe in Notion come "Da fare" e invia l'email del brief via Resend.
 * `kanri_article.py`: Script di core che esegue ricerche web via Tavily, estrae i testi delle fonti con Firecrawl, trova articoli correlati in Notion, e fa redigere l'articolo a Gemini o OpenRouter.
 * `notion_watcher.py`: Demone che esamina Notion ogni 5 minuti alla ricerca di righe con `Scrivi articolo` spuntato, avviando il processo di generazione.
 * `notion_sync.py`: Client Notion personalizzato per convertire il Markdown in blocchi ricchi Notion e aggiornare le proprietà delle pagine.
