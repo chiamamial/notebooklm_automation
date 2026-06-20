@@ -1,0 +1,11 @@
+[Unit]
+Description=Pulizia KANRI: archivia le news 'Da fare' non pubblicate e scadute
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/notebooklm
+EnvironmentFile=/opt/notebooklm/notebooklm.env
+Environment=PATH=/opt/notebooklm/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/notebooklm/.venv/bin/python /opt/notebooklm/kanri_cleanup.py

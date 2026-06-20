@@ -39,6 +39,7 @@ systemctl enable --now notebooklm-keepalive.timer
 systemctl enable --now notebooklm-research.timer
 systemctl enable --now notebooklm-watcher.timer
 systemctl enable --now notebooklm-podcast.timer
+systemctl enable --now notebooklm-cleanup.timer
 systemctl enable --now notebooklm-trigger.service
 
 echo

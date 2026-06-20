@@ -130,6 +130,7 @@ Gli script di automazione risiedono nella cartella `/opt/notebooklm` su una VPS 
 * `kanri_engine.py`: Gestore unificato delle chiamate API per LLM (Gemini/OpenRouter), Tavily, Firecrawl, RSS e email.
 * `kanri_podcast.py`: Genera la puntata podcast settimanale **KANRI Tape** (digest breve ~2 min). Legge da Notion gli articoli pubblicati nell'ultima settimana, fa scrivere il copione a un LLM, lo sintetizza in mp3 con **ElevenLabs** (free, senza carta; fallback Google Chirp 3 HD → edge-tts), carica l'audio su **Internet Archive** e salva i metadati nel database Notion "Podcast".
 * `podcast_instructions.txt`: Prompt di voce del podcast (copione parlato, tono sobrio, regola anti-invenzione, struttura intro/articoli/chiusura).
+* `kanri_cleanup.py`: Pulizia giornaliera. **Archivia** (cestino Notion, recuperabile ~30gg) le news mai lavorate: Stato = "Da fare", non pubblicate e con `Data` più vecchia di `CLEANUP_DAYS` giorni (default 3). Non tocca mai gli articoli scritti o pubblicati. Timer `notebooklm-cleanup.timer` (06:30).
 * `trigger_server.py`: Server HTTP leggero (porta `8765`) che risponde all'endpoint `/cerca-news?token=...` per forzare la scansione RSS manuale.
 * `kanri_feeds.txt`: Elenco dei feed RSS da scansionare.
 * `article_instructions.txt`: Prompt contenente lo stile di scrittura, le limitazioni lessicali (evitare metafore banali e frasi pubblicitarie) e le linee guida SEO.

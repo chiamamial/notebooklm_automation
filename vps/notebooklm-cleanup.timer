@@ -1,0 +1,10 @@
+[Unit]
+Description=Pulizia giornaliera delle news KANRI scadute
+
+[Timer]
+# Ora locale del VPS (fuso Europe/Rome). 06:30, prima del brief delle 07:00.
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

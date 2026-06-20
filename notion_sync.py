@@ -331,6 +331,37 @@ def uncheck(token, page_id):
          {"properties": {"Scrivi articolo": {"checkbox": False}}})
 
 
+def righe_da_pulire(token, db_id, days=3):
+    """News mai lavorate da archiviare: Stato='Da fare', non pubblicate e con
+    `Data` piu' vecchia di `days` giorni. Ritorna [{page_id, title, data}]."""
+    from datetime import date, timedelta
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    payload = {"filter": {"and": [
+        {"property": "Pubblica", "checkbox": {"equals": False}},
+        {"property": "Stato", "select": {"equals": "Da fare"}},
+        {"property": "Data", "date": {"on_or_before": cutoff}},
+    ]}, "page_size": 100}
+    out, cur = [], None
+    while True:
+        if cur:
+            payload["start_cursor"] = cur
+        res = _req("POST", f"/databases/{db_id}/query", token, payload)
+        for p in res.get("results", []):
+            title = "".join(t.get("plain_text", "")
+                            for t in p["properties"].get("Notizia", {}).get("title", []))
+            data = (p["properties"].get("Data", {}).get("date") or {}).get("start", "")
+            out.append({"page_id": p["id"], "title": title, "data": data})
+        if not res.get("has_more"):
+            break
+        cur = res["next_cursor"]
+    return out
+
+
+def archivia(token, page_id):
+    """Archivia (cestina, recuperabile ~30gg) una pagina Notion."""
+    _req("PATCH", f"/pages/{page_id}", token, {"archived": True})
+
+
 def _txt(content, bold=False, italic=False, link=None):
     """Uno o piu' oggetti rich_text (spezzati a 1900 char), con annotazioni."""
     out = []
