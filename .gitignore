@@ -1,12 +1,21 @@
-report-*.md
-brief-*.md
-kanri-audio-*.mp3
-kanri-audio-*.txt
-kanri-tape-*.mp3
-kanri-tape-*.txt
-storage_state.json
-nlm_home/
+# Segreti / ambiente
 notebooklm.env
 *.local
+storage_state.json
+nlm_home/
+
+# Artefatti generati a runtime
+report-*.md
+brief-*.md
+kanri-audio-*.txt
+kanri-tape-*.txt
+# audio in root (la traccia ufficiale del podcast vive in assets/)
+/*.mp3
+/*.wav
+
+# Python
 __pycache__/
 .venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

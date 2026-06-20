@@ -11,22 +11,27 @@ Variabili d'ambiente: OPENROUTER_API_KEY, OPENROUTER_MODEL,
 TAVILY_API_KEY, FIRECRAWL_API_KEY
 """
 
+import json
 import os
 import re
-import json
 import time
-import urllib.request
 import urllib.error
-from datetime import datetime, timezone, timedelta
+import urllib.request
+from datetime import datetime, timedelta, timezone
 
-UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/126 Safari/537.36")
+UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126 Safari/537.36"
+)
 
 
 def _post(url, payload, headers, timeout=120):
     req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(),
-        headers={**headers, "Content-Type": "application/json"}, method="POST")
+        url,
+        data=json.dumps(payload).encode(),
+        headers={**headers, "Content-Type": "application/json"},
+        method="POST",
+    )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
@@ -46,8 +51,12 @@ FALLBACK_MODELS = [
 def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=1, model=None):
     key = os.environ["OPENROUTER_API_KEY"]
     model = model or os.environ.get("OPENROUTER_MODEL", FALLBACK_MODELS[0])
-    payload = {"model": model, "messages": messages,
-               "max_tokens": max_tokens, "temperature": temperature}
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
     headers = {"Authorization": f"Bearer {key}", "X-Title": "KANRI"}
     last = ""
     for attempt in range(retries + 1):
@@ -73,17 +82,105 @@ def alert(subject, text):
     if not key or not to:
         return
     sender = os.environ.get("MAIL_FROM", "onboarding@resend.dev")
-    payload = {"from": sender, "to": [to], "subject": subject,
-               "html": f"<pre style='font-family:sans-serif;white-space:pre-wrap'>{text}</pre>"}
+    payload = {
+        "from": sender,
+        "to": [to],
+        "subject": subject,
+        "html": f"<pre style='font-family:sans-serif;white-space:pre-wrap'>{text}</pre>",
+    }
     req = urllib.request.Request(
-        "https://api.resend.com/emails", data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-                 "User-Agent": "kanri/1.0"}, method="POST")
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "User-Agent": "kanri/1.0",
+        },
+        method="POST",
+    )
     try:
         urllib.request.urlopen(req, timeout=20)
         print("  (avviso email inviato)", flush=True)
     except Exception:
         pass
+
+
+def md_to_html(md):
+    """Conversione minimale Markdown -> HTML (titoli, grassetto, liste)."""
+    import html as _html
+
+    def fmt(text):
+        text = _html.escape(text)
+        return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+
+    out, in_list = [], False
+
+    def close_list():
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    for line in md.splitlines():
+        s = line.strip()
+        if s.startswith(("- ", "* ")):
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{fmt(s[2:])}</li>")
+            continue
+        close_list()
+        if line.startswith("### "):
+            out.append(f"<h3>{fmt(line[4:])}</h3>")
+        elif line.startswith("## "):
+            out.append(f"<h2>{fmt(line[3:])}</h2>")
+        elif line.startswith("# "):
+            out.append(f"<h1>{fmt(line[2:])}</h1>")
+        elif s == "":
+            continue
+        else:
+            out.append(f"<p>{fmt(line)}</p>")
+    close_list()
+    body = "\n".join(out)
+    return (
+        f'<div style="font-family:sans-serif;max-width:680px;margin:auto;'
+        f'line-height:1.5">{body}</div>'
+    )
+
+
+def send_email(subject, markdown_body, attachment_path=None):
+    """Invia un'email via Resend. Se manca la configurazione, stampa e basta."""
+    import base64
+    from pathlib import Path
+
+    api_key = os.environ.get("RESEND_API_KEY")
+    to = os.environ.get("MAIL_TO")
+    if not api_key or not to:
+        print("(RESEND_API_KEY/MAIL_TO non impostate: salto l'invio email)")
+        print(f"--- {subject} ---")
+        print(markdown_body[:500] + ("..." if len(markdown_body) > 500 else ""))
+        return
+    sender = os.environ.get("MAIL_FROM", "onboarding@resend.dev")
+    payload = {"from": sender, "to": [to], "subject": subject, "html": md_to_html(markdown_body)}
+    if attachment_path:
+        attachment = base64.b64encode(Path(attachment_path).read_bytes()).decode()
+        payload["attachments"] = [{"filename": Path(attachment_path).name, "content": attachment}]
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "kanri/1.0",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read())
+        print(f"Email inviata a {to} (id: {body.get('id')})", flush=True)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Resend errore {e.code}: {e.read().decode()}") from e
 
 
 def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None, thinking=True):
@@ -92,8 +189,9 @@ def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None, thin
     default e consumano il budget di output, troncando la risposta)."""
     key = os.environ["GEMINI_API_KEY"]
     model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{model}:generateContent?key={key}")
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    )
     gen_config = {"maxOutputTokens": max_tokens, "temperature": temperature}
     if not thinking:
         gen_config["thinkingConfig"] = {"thinkingBudget": 0}
@@ -121,7 +219,9 @@ def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True):
             print(f"  (Gemini fallito, uso OpenRouter: {repr(e)[:120]})", flush=True)
     return openrouter_chat(
         [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        max_tokens, temperature)
+        max_tokens,
+        temperature,
+    )
 
 
 def llm_json(messages, max_tokens=8000, temperature=0.4):
@@ -153,8 +253,12 @@ def pulisci(md):
     md = re.sub(r"[¹²³⁰-⁹]+", "", md)  # apici ¹²³
     md = re.sub(r"[ \t]+([.,;:!?])", r"\1", md)  # spazi prima della punteggiatura
     md = re.sub(r"(?<=\S) {2,}(?=\S)", " ", md)  # doppi spazi rimasti dopo le rimozioni
-    SEZIONI = {"seo": "## SEO", "social": "## SOCIAL",
-               "immagini": "## IMMAGINI", "note fonti": "## NOTE FONTI"}
+    SEZIONI = {
+        "seo": "## SEO",
+        "social": "## SOCIAL",
+        "immagini": "## IMMAGINI",
+        "note fonti": "## NOTE FONTI",
+    }
     out, titolo_rimosso = [], False
     for ln in md.splitlines():
         st = ln.strip()
@@ -190,12 +294,11 @@ def extract_json(text):
                     depth -= 1
                     if depth == 0:
                         try:
-                            cands.append(json.loads(text[i:j + 1]))
+                            cands.append(json.loads(text[i : j + 1]))
                         except Exception:
                             pass
                         break
-    liste = [c for c in cands if isinstance(c, list) and c
-             and all(isinstance(x, dict) for x in c)]
+    liste = [c for c in cands if isinstance(c, list) and c and all(isinstance(x, dict) for x in c)]
     if liste:
         return max(liste, key=len)
     dicts = [c for c in cands if isinstance(c, dict)]
@@ -208,11 +311,13 @@ def extract_json(text):
 
 # ---------- TTS (edge-tts: voci neurali gratuite di Microsoft Edge) ----------
 
+
 def tts_edge(text, out_mp3, voice="it-IT-IsabellaNeural", rate="-4%", pitch="+0Hz"):
     """Sintetizza `text` in un mp3 con edge-tts (gratis, nessuna API key).
     Voci italiane utili: it-IT-IsabellaNeural, it-IT-ElsaNeural, it-IT-DiegoNeural.
     Restituisce il percorso del file generato."""
     import asyncio
+
     import edge_tts
 
     async def _run():
@@ -227,18 +332,31 @@ def tts_edge(text, out_mp3, voice="it-IT-IsabellaNeural", rate="-4%", pitch="+0H
 
 # ---------- Mix audio (sottofondo musicale con ducking, via ffmpeg) ----------
 
+
 def _durata_audio(path):
     """Durata in secondi di un file audio (via ffprobe)."""
     import subprocess
+
     out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", path],
-        capture_output=True, text=True, check=True)
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     return float(out.stdout.strip())
 
 
-def mix_audio(voce_mp3, musica_mp3, out_mp3, intro=4.0, volume=0.30,
-              tail=4.0, fade=4.0, threshold=0.03, ratio=8):
+def mix_audio(
+    voce_mp3,
+    musica_mp3,
+    out_mp3,
+    intro=4.0,
+    volume=0.30,
+    tail=4.0,
+    fade=4.0,
+    threshold=0.03,
+    ratio=8,
+):
     """Monta la voce su una base musicale: `intro` secondi di musica pulita,
     poi voce con musica in ducking (si abbassa quando si parla), `fade` secondi
     di dissolvenza finale. La musica viene messa in loop per coprire la durata.
@@ -260,10 +378,27 @@ def mix_audio(voce_mp3, musica_mp3, out_mp3, intro=4.0, volume=0.30,
         f"[bgd][vo1]amix=inputs=2:duration=longest:normalize=0[m];"
         f"[m]afade=t=out:st={fade_st}:d={fade}[out]"
     )
-    cmd = ["ffmpeg", "-y", "-loglevel", "error",
-           "-stream_loop", "-1", "-i", musica_mp3, "-i", voce_mp3,
-           "-filter_complex", filtro, "-map", "[out]",
-           "-ac", "2", "-b:a", "128k", out_mp3]
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-stream_loop",
+        "-1",
+        "-i",
+        musica_mp3,
+        "-i",
+        voce_mp3,
+        "-filter_complex",
+        filtro,
+        "-map",
+        "[out]",
+        "-ac",
+        "2",
+        "-b:a",
+        "128k",
+        out_mp3,
+    ]
     subprocess.run(cmd, check=True)
     if not os.path.exists(out_mp3) or os.path.getsize(out_mp3) == 0:
         raise RuntimeError("ffmpeg non ha prodotto l'audio mixato")
@@ -272,10 +407,14 @@ def mix_audio(voce_mp3, musica_mp3, out_mp3, intro=4.0, volume=0.30,
 
 # ---------- ElevenLabs (voce di alta qualità, piano free senza carta) ----------
 
+
 def _post_bytes(url, payload, headers, timeout=120):
     req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(),
-        headers={**headers, "Content-Type": "application/json"}, method="POST")
+        url,
+        data=json.dumps(payload).encode(),
+        headers={**headers, "Content-Type": "application/json"},
+        method="POST",
+    )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
@@ -287,8 +426,8 @@ def elevenlabs_crediti_residui(api_key=None):
         return None
     try:
         req = urllib.request.Request(
-            "https://api.elevenlabs.io/v1/user/subscription",
-            headers={"xi-api-key": key})
+            "https://api.elevenlabs.io/v1/user/subscription", headers={"xi-api-key": key}
+        )
         with urllib.request.urlopen(req, timeout=20) as r:
             d = json.load(r)
         return max(0, d.get("character_limit", 0) - d.get("character_count", 0))
@@ -302,10 +441,8 @@ def tts_elevenlabs(text, out_mp3, voice_id=None, model_id=None, api_key=None):
     key = api_key or os.environ["ELEVENLABS_API_KEY"]
     voice_id = voice_id or os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
     model_id = model_id or os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
-    url = (f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-           f"?output_format=mp3_44100_128")
-    audio = _post_bytes(url, {"text": text, "model_id": model_id},
-                        {"xi-api-key": key})
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128"
+    audio = _post_bytes(url, {"text": text, "model_id": model_id}, {"xi-api-key": key})
     with open(out_mp3, "wb") as f:
         f.write(audio)
     if os.path.getsize(out_mp3) == 0:
@@ -314,6 +451,7 @@ def tts_elevenlabs(text, out_mp3, voice_id=None, model_id=None, api_key=None):
 
 
 # ---------- Google Cloud Text-to-Speech (voci Chirp 3 HD) ----------
+
 
 def _split_tts(text, limit=2500):
     """Spezza il testo in blocchi <= limit caratteri, sui confini di paragrafo
@@ -340,8 +478,14 @@ def _split_tts(text, limit=2500):
     return blocchi
 
 
-def tts_google(text, out_mp3, voice="it-IT-Chirp3-HD-Aoede", language_code="it-IT",
-               api_key=None, speaking_rate=1.0):
+def tts_google(
+    text,
+    out_mp3,
+    voice="it-IT-Chirp3-HD-Aoede",
+    language_code="it-IT",
+    api_key=None,
+    speaking_rate=1.0,
+):
     """Sintetizza `text` in mp3 con Google Cloud Text-to-Speech (voci Chirp 3 HD).
     Spezza i testi lunghi e concatena gli mp3. Restituisce il percorso del file.
     Richiede GOOGLE_TTS_API_KEY (API 'Cloud Text-to-Speech' abilitata sul progetto)."""
@@ -370,8 +514,8 @@ def tts_google(text, out_mp3, voice="it-IT-Chirp3-HD-Aoede", language_code="it-I
 
 # ---------- Internet Archive (hosting audio gratuito con API) ----------
 
-def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=None,
-                   retries=2):
+
+def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=None, retries=2):
     """Carica un file su archive.org e restituisce l'URL pubblico diretto.
     Le chiavi S3 si generano (gratis) su https://archive.org/account/s3.php
     e vanno in ARCHIVE_ACCESS_KEY / ARCHIVE_SECRET_KEY."""
@@ -383,9 +527,15 @@ def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=N
     last = ""
     for attempt in range(retries + 1):
         try:
-            resp = ia.upload(identifier, files={fname: filepath}, metadata=metadata,
-                             access_key=access_key, secret_key=secret_key,
-                             retries=2, verbose=False)
+            resp = ia.upload(
+                identifier,
+                files={fname: filepath},
+                metadata=metadata,
+                access_key=access_key,
+                secret_key=secret_key,
+                retries=2,
+                verbose=False,
+            )
             bad = [r for r in resp if getattr(r, "status_code", 200) not in (200, None)]
             if bad:
                 last = f"status {[getattr(r, 'status_code', '?') for r in bad]}"
@@ -400,15 +550,25 @@ def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=N
 
 # ---------- Tavily ----------
 
+
 def tavily_search(query, max_results=6, days=14):
     key = os.environ["TAVILY_API_KEY"]
-    d = _post("https://api.tavily.com/search",
-              {"api_key": key, "query": query, "max_results": max_results,
-               "search_depth": "advanced", "days": days}, {})
+    d = _post(
+        "https://api.tavily.com/search",
+        {
+            "api_key": key,
+            "query": query,
+            "max_results": max_results,
+            "search_depth": "advanced",
+            "days": days,
+        },
+        {},
+    )
     return d.get("results", [])
 
 
 # ---------- Firecrawl ----------
+
 
 def firecrawl_scrape(url, timeout=120):
     return firecrawl_scrape_meta(url, timeout)[0]
@@ -418,13 +578,21 @@ def firecrawl_scrape_meta(url, timeout=120):
     """Ritorna (markdown, immagine_copertina) per una pagina."""
     key = os.environ["FIRECRAWL_API_KEY"]
     try:
-        d = _post("https://api.firecrawl.dev/v1/scrape",
-                  {"url": url, "formats": ["markdown"], "onlyMainContent": True},
-                  {"Authorization": f"Bearer {key}"}, timeout)
+        d = _post(
+            "https://api.firecrawl.dev/v1/scrape",
+            {"url": url, "formats": ["markdown"], "onlyMainContent": True},
+            {"Authorization": f"Bearer {key}"},
+            timeout,
+        )
         data = d.get("data", {}) or {}
         meta = data.get("metadata", {}) or {}
-        cover = (meta.get("ogImage") or meta.get("og:image")
-                 or meta.get("twitter:image") or meta.get("image") or "")
+        cover = (
+            meta.get("ogImage")
+            or meta.get("og:image")
+            or meta.get("twitter:image")
+            or meta.get("image")
+            or ""
+        )
         if isinstance(cover, list):
             cover = cover[0] if cover else ""
         return data.get("markdown", "") or "", cover or ""
@@ -434,8 +602,10 @@ def firecrawl_scrape_meta(url, timeout=120):
 
 # ---------- RSS ----------
 
+
 def fetch_rss_items(feeds_file, max_age_days=2, per_feed=6):
     import feedparser
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
     items = []
     for line in open(feeds_file, encoding="utf-8"):
@@ -458,13 +628,15 @@ def fetch_rss_items(feeds_file, max_age_days=2, per_feed=6):
             if pub and pub < cutoff:
                 continue
             summary = re.sub(r"<[^>]+>", "", e.get("summary", ""))[:300]
-            items.append({
-                "source": src,
-                "title": e.get("title", "").strip(),
-                "url": e.get("link", ""),
-                "summary": re.sub(r"\s+", " ", summary).strip(),
-                "published": pub.isoformat() if pub else "",
-            })
+            items.append(
+                {
+                    "source": src,
+                    "title": e.get("title", "").strip(),
+                    "url": e.get("link", ""),
+                    "summary": re.sub(r"\s+", " ", summary).strip(),
+                    "published": pub.isoformat() if pub else "",
+                }
+            )
             n += 1
             if n >= per_feed:
                 break

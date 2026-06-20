@@ -9,10 +9,10 @@ Variabili d'ambiente: TRIGGER_TOKEN (obbligatoria), TRIGGER_PORT (default 8765)
 """
 
 import os
-import sys
 import subprocess
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 TOKEN = os.environ.get("TRIGGER_TOKEN", "")
 PORT = int(os.environ.get("TRIGGER_PORT", "8765"))
@@ -49,20 +49,24 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, "⛔", "Accesso negato", "Token non valido.")
         print("Avvio di notebooklm-research.service in corso...", flush=True)
         try:
-            subprocess.run(["systemctl", "--no-block", "start", "notebooklm-research.service"], check=True)
-            self._send(200, "✅", "Ricerca avviata!",
-                       "Le nuove news compariranno nel database tra circa 2 minuti. "
-                       "Puoi chiudere questa pagina.")
+            subprocess.run(
+                ["systemctl", "--no-block", "start", "notebooklm-research.service"], check=True
+            )
+            self._send(
+                200,
+                "✅",
+                "Ricerca avviata!",
+                "Le nuove news compariranno nel database tra circa 2 minuti. "
+                "Puoi chiudere questa pagina.",
+            )
         except Exception as e:
             print(f"Errore durante l'avvio del servizio: {e}", flush=True)
             self._send(500, "❌", "Errore di sistema", f"Impossibile avviare il servizio: {e}")
 
     def log_message(self, format, *args):
         # Log standard HTTP formatting to stderr
-        sys.stderr.write("%s - - [%s] %s\n" %
-                         (self.client_address[0],
-                          self.log_date_time_string(),
-                          format%args))
+        msg = format % args
+        sys.stderr.write(f"{self.client_address[0]} - - [{self.log_date_time_string()}] {msg}\n")
 
 
 if __name__ == "__main__":

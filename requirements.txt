@@ -1,8 +1,5 @@
-# Su GitHub Actions (server headless) NON serve Playwright: tutte le
-# operazioni vanno via HTTP usando i cookie in NOTEBOOKLM_AUTH_JSON.
-# Playwright serve solo per il `notebooklm login` iniziale, che fai in locale.
-notebooklm-py>=0.6.0
-feedparser>=6.0
-# Podcast settimanale: TTS gratuito (voci neurali Edge) + upload audio su Internet Archive.
-edge-tts>=6.1
-internetarchive>=3.5
+# Dipendenze runtime (installate sulla VPS: pip install -r requirements.txt).
+# La logica core usa solo la libreria standard; queste servono a funzioni specifiche.
+feedparser>=6.0          # parsing dei feed RSS (brief)
+edge-tts>=6.1            # TTS di fallback gratuito (podcast)
+internetarchive>=3.5     # upload audio su archive.org (podcast)

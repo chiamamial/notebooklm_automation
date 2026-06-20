@@ -28,10 +28,10 @@ import shutil
 from datetime import date, timedelta
 from pathlib import Path
 
+import config
 import kanri_engine as ke
 import notion_sync
-import config
-from daily_research import send_email
+from kanri_engine import send_email
 
 PODCAST_NOME = config.get("podcast.nome", f"{config.BRAND} Tape")
 PODCAST_SLUG = config.get("podcast.slug", "kanri-tape")
@@ -51,7 +51,7 @@ def taglia_a_caratteri(testo, max_chars):
     tagliato = testo[:max_chars]
     m = list(re.finditer(r"[.!?](?:\s|$)", tagliato))
     if m:
-        tagliato = tagliato[:m[-1].end()]
+        tagliato = tagliato[: m[-1].end()]
     return tagliato.strip()
 
 
@@ -85,8 +85,20 @@ def genera_audio(copione, out_mp3):
 
 def settimana_label(oggi):
     """Etichetta leggibile della settimana, es. '9–15 giugno 2026'."""
-    mesi = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
-            "agosto", "settembre", "ottobre", "novembre", "dicembre"]
+    mesi = [
+        "gennaio",
+        "febbraio",
+        "marzo",
+        "aprile",
+        "maggio",
+        "giugno",
+        "luglio",
+        "agosto",
+        "settembre",
+        "ottobre",
+        "novembre",
+        "dicembre",
+    ]
     inizio = oggi - timedelta(days=7)
     if inizio.month == oggi.month:
         return f"{inizio.day}–{oggi.day} {mesi[oggi.month - 1]} {oggi.year}"
@@ -96,9 +108,11 @@ def settimana_label(oggi):
 def costruisci_prompt(articoli, settimana):
     blocchi = []
     for i, a in enumerate(articoli, 1):
-        parti = [f"ARTICOLO {i}",
-                 f"Titolo: {a['title']}",
-                 f"Categoria: {a.get('categoria') or '—'}"]
+        parti = [
+            f"ARTICOLO {i}",
+            f"Titolo: {a['title']}",
+            f"Categoria: {a.get('categoria') or '—'}",
+        ]
         if a.get("summary"):
             parti.append(f"Di cosa parla: {a['summary']}")
         # solo un estratto del corpo: basta per il taglio parlato, tiene corto il prompt
@@ -107,10 +121,12 @@ def costruisci_prompt(articoli, settimana):
             parti.append(f"Estratto: {corpo[:600]}")
         blocchi.append("\n".join(parti))
     materiali = "\n\n———\n\n".join(blocchi)
-    return (f"Settimana di riferimento: {settimana}.\n"
-            f"Numero di articoli pubblicati: {len(articoli)}.\n\n"
-            f"Ecco i materiali (usa SOLO queste informazioni):\n\n{materiali}\n\n"
-            f"Scrivi il copione della puntata di {PODCAST_NOME} seguendo le istruzioni.")
+    return (
+        f"Settimana di riferimento: {settimana}.\n"
+        f"Numero di articoli pubblicati: {len(articoli)}.\n\n"
+        f"Ecco i materiali (usa SOLO queste informazioni):\n\n{materiali}\n\n"
+        f"Scrivi il copione della puntata di {PODCAST_NOME} seguendo le istruzioni."
+    )
 
 
 def stima_durata(testo):
@@ -138,8 +154,13 @@ def main():
     # 1. copione
     # thinking=False: i modelli Gemini 2.5 altrimenti consumano il budget di
     # output ragionando e troncano il copione.
-    copione = ke.article_llm(SYSTEM, costruisci_prompt(articoli, settimana),
-                             max_tokens=2000, temperature=0.6, thinking=False).strip()
+    copione = ke.article_llm(
+        SYSTEM,
+        costruisci_prompt(articoli, settimana),
+        max_tokens=2000,
+        temperature=0.6,
+        thinking=False,
+    ).strip()
     copione = _pulisci_copione(copione)
     if len(copione.split()) < 60:
         raise RuntimeError(f"copione troppo corto ({len(copione.split())} parole)")
@@ -148,9 +169,14 @@ def main():
     prima = len(copione)
     copione = taglia_a_caratteri(copione, max_chars)
     if len(copione) < prima:
-        print(f"  (copione troncato da {prima} a {len(copione)} caratteri per la quota)", flush=True)
+        print(
+            f"  (copione troncato da {prima} a {len(copione)} caratteri per la quota)", flush=True
+        )
     durata = stima_durata(copione)
-    print(f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})", flush=True)
+    print(
+        f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})",
+        flush=True,
+    )
 
     # 2. audio (voce)
     mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.mp3")
@@ -159,12 +185,15 @@ def main():
     print(f"TTS: voce generata ({voce_mp3.stat().st_size // 1024} KB) con {voce}", flush=True)
 
     # 2b. mix con sottofondo musicale (intro pulita + ducking + fade out)
-    bg = os.environ.get("PODCAST_BG_MUSIC",
-                        str(Path(__file__).parent / "assets" / "kanri-bed.mp3"))
+    bg = os.environ.get("PODCAST_BG_MUSIC", str(Path(__file__).parent / "assets" / "kanri-bed.mp3"))
     if shutil.which("ffmpeg") and os.path.exists(bg):
-        ke.mix_audio(str(voce_mp3), bg, str(mp3),
-                     intro=float(os.environ.get("PODCAST_INTRO_SEC", "4")),
-                     volume=float(os.environ.get("PODCAST_MUSIC_VOLUME", "0.30")))
+        ke.mix_audio(
+            str(voce_mp3),
+            bg,
+            str(mp3),
+            intro=float(os.environ.get("PODCAST_INTRO_SEC", "4")),
+            volume=float(os.environ.get("PODCAST_MUSIC_VOLUME", "0.30")),
+        )
         print(f"Mix: sottofondo applicato -> {mp3.stat().st_size // 1024} KB", flush=True)
     else:
         mp3 = voce_mp3  # niente ffmpeg/traccia: pubblica la sola voce
@@ -173,8 +202,10 @@ def main():
     # 3. upload su Internet Archive
     titolo = f"{PODCAST_NOME} — {settimana}"
     identifier = f"{PODCAST_SLUG}-{oggi.isoformat()}"
-    descrizione = (f"{PODCAST_NOME}, il punto settimanale di {config.BRAND}, "
-                   f"{config.DESCRIZIONE}. Gli articoli pubblicati nella settimana {settimana}.")
+    descrizione = (
+        f"{PODCAST_NOME}, il punto settimanale di {config.BRAND}, "
+        f"{config.DESCRIZIONE}. Gli articoli pubblicati nella settimana {settimana}."
+    )
     audio_url = ""
     if os.environ.get("ARCHIVE_ACCESS_KEY"):
         meta = {
@@ -196,8 +227,12 @@ def main():
     pdb = os.environ.get("PODCAST_DB_ID")
     if pdb and audio_url:
         ep = {
-            "titolo": titolo, "data": oggi.isoformat(), "descrizione": descrizione,
-            "audio_url": audio_url, "durata": durata, "copione": copione,
+            "titolo": titolo,
+            "data": oggi.isoformat(),
+            "descrizione": descrizione,
+            "audio_url": audio_url,
+            "durata": durata,
+            "copione": copione,
             "articoli": [{"title": a["title"], "slug": a.get("slug", "")} for a in articoli],
         }
         notion_sync.crea_episodio(nt, pdb, ep)
@@ -208,17 +243,19 @@ def main():
     # 5. email di notifica con copione in allegato
     txt = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.txt")
     txt.write_text(copione, encoding="utf-8")
-    corpo_mail = (f"# {titolo}\n\nDurata stimata: {durata}\n"
-                  f"Articoli: {len(articoli)}\n"
-                  f"Audio: {audio_url or '(upload saltato)'}\n\n---\n\n{copione}")
+    corpo_mail = (
+        f"# {titolo}\n\nDurata stimata: {durata}\n"
+        f"Articoli: {len(articoli)}\n"
+        f"Audio: {audio_url or '(upload saltato)'}\n\n---\n\n{copione}"
+    )
     send_email(f"🎙️ {PODCAST_NOME} — {settimana}", corpo_mail, str(txt))
 
 
 def _pulisci_copione(testo):
     """Toglie residui di markdown/regia che l'LLM a volte aggiunge."""
-    testo = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", testo)        # heading
-    testo = re.sub(r"[*_`]+", "", testo)                        # enfasi markdown
-    testo = re.sub(r"(?m)^\s*[-*•]\s+", "", testo)              # punti elenco
+    testo = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", testo)  # heading
+    testo = re.sub(r"[*_`]+", "", testo)  # enfasi markdown
+    testo = re.sub(r"(?m)^\s*[-*•]\s+", "", testo)  # punti elenco
     testo = re.sub(r"(?im)^\s*(intro|outro|sigla|nota di regia)\s*:?\s*$", "", testo)
     return re.sub(r"\n{3,}", "\n\n", testo).strip()
 
@@ -226,6 +263,7 @@ def _pulisci_copione(testo):
 if __name__ == "__main__":
     import time
     import traceback
+
     for _tentativo in range(2):
         try:
             main()
@@ -237,7 +275,9 @@ if __name__ == "__main__":
                 print("Podcast fallito, riprovo tra 120s...", flush=True)
                 time.sleep(120)
                 continue
-            ke.alert(f"⚠️ {PODCAST_NOME} FALLITO — {date.today().isoformat()}",
-                     "La puntata podcast settimanale non è stata generata dopo 2 tentativi.\n\n"
-                     + traceback.format_exc())
+            ke.alert(
+                f"⚠️ {PODCAST_NOME} FALLITO — {date.today().isoformat()}",
+                "La puntata podcast settimanale non è stata generata dopo 2 tentativi.\n\n"
+                + traceback.format_exc(),
+            )
             raise

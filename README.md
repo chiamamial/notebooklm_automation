@@ -1,133 +1,74 @@
-# Daily NotebookLM Research → Email
+# KANRI — Automazione editoriale
 
-Automazione che ogni giorno esegue una **deep research con Google NotebookLM**,
-genera un report e te lo manda via **email**. Gira su **GitHub Actions** (cloud).
+Pipeline di automazione per una rivista digitale: raccoglie le news dai feed RSS,
+le cura con un LLM, genera gli articoli, produce un podcast settimanale e tiene
+pulito il database. **Notion** fa da CMS; il frontend (repo separato) legge da lì.
 
-Usa la libreria non ufficiale [`notebooklm-py`](https://github.com/teng-lin/notebooklm-py):
-il login a Google si fa **una volta sola** in locale, poi tutto gira via HTTP
-sul cloud usando i cookie salvati.
+> Documentazione tecnica completa (architettura, schema Notion, frontend, SEO):
+> [`DOCUMENTAZIONE.md`](DOCUMENTAZIONE.md).
 
-## Come funziona
+## Architettura in breve
 
-`daily_research.py` esegue in sequenza:
-1. crea un notebook `Daily Research <data>`
-2. lancia una web research (modalità `deep`) e importa le fonti citate
-3. genera un report *briefing-doc* e lo scarica in Markdown
-4. invia il report via email (Resend API)
-5. cancella il notebook (per non accumulare; disattiva con `KEEP_NOTEBOOK=1`)
+```
+Feed RSS ─▶ kanri_brief ─▶ Notion (news "Da fare") ─▶ [spunta] ─▶ notion_watcher
+                                                                      └▶ kanri_article ─▶ Notion (articolo)
+Notion (pubblicati) ─▶ kanri_podcast ─▶ TTS + mix ─▶ Internet Archive + Notion
+Notion (scaduti)    ─▶ kanri_cleanup ─▶ archivia
+```
 
-La domanda fissa è in [`prompt.txt`](prompt.txt) (oppure via env `RESEARCH_QUERY`).
+Tutto è orchestrato da **systemd timer** su una VPS. La logica core usa solo la
+libreria standard; le dipendenze esterne servono a funzioni specifiche.
 
----
+## Componenti
 
-## Setup (una tantum)
+| File | Ruolo |
+|:---|:---|
+| `kanri_brief.py` | Scansione RSS + selezione LLM (due passate: musica + generale) → news su Notion + email. |
+| `notion_watcher.py` | Controlla Notion e avvia la scrittura per le news spuntate. |
+| `kanri_article.py` | Ricerca (Tavily/Firecrawl) + stesura articolo con LLM. |
+| `kanri_podcast.py` | Copione LLM → TTS → mix musicale → upload audio → Notion. |
+| `kanri_cleanup.py` | Archivia le news mai lavorate e scadute. |
+| `kanri_engine.py` | Client condivisi: LLM, ricerca, RSS, TTS, audio, email. |
+| `notion_sync.py` | Client Notion (REST). |
+| `config.py` + `blog.config.json` | Configurazione del blog (config-driven). |
+| `trigger_server.py` | Endpoint HTTP per forzare il brief manualmente. |
 
-### 1. Login NotebookLM (già fatto in locale)
+## Configurazione
+
+Tutto ciò che è specifico del blog vive in [`blog.config.json`](blog.config.json)
+(brand, categorie, priorità, parametri brief, podcast). Per gestire un altro blog
+con lo stesso codice, punta la variabile d'ambiente `BLOG_CONFIG` a un altro file.
+
+I segreti e i parametri runtime stanno in `notebooklm.env` (non versionato): vedi
+[`.env.example`](.env.example).
+
+## Sviluppo
+
 ```bash
-notebooklm login                  # apre il browser, accedi a Google
-notebooklm auth check --test      # deve dire status: ok
-```
-Questo crea `~/.notebooklm/profiles/default/storage_state.json`.
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"      # runtime + ruff + pytest
 
-### 2. Crea il repo su GitHub e carica questi file
+ruff check .                 # lint
+ruff format .                # formattazione
+pytest -q                    # test
+```
+
+La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) esegue lint,
+controllo formattazione e test a ogni push/PR.
+
+## Deploy (VPS)
+
 ```bash
-cd ~/Desktop/notebooklm
-git init && git add . && git commit -m "Daily NotebookLM research"
-gh repo create notebooklm-daily --private --source=. --push
+ssh root@<host>
+cd /opt/notebooklm && git pull --ff-only
+.venv/bin/pip install -r requirements.txt        # se cambiano le dipendenze
+cp vps/notebooklm-*.service vps/notebooklm-*.timer /etc/systemd/system/
+systemctl daemon-reload
 ```
-> `.gitignore` esclude già `storage_state.json` e i report: **non finiscono nel repo**.
 
-### 3. Imposta i GitHub Secrets
-Vai su **Settings → Secrets and variables → Actions → New repository secret**
-e crea:
+Setup iniziale completo: [`vps/setup.sh`](vps/setup.sh). Comandi e timer:
+[`DOCUMENTAZIONE.md`](DOCUMENTAZIONE.md).
 
-| Secret | Valore |
-|--------|--------|
-| `NOTEBOOKLM_AUTH_JSON` | il **contenuto** di `storage_state.json` (vedi sotto) |
-| `RESEND_API_KEY` | la API key di Resend (https://resend.com/api-keys) |
-| `MAIL_FROM` | mittente. In test usa `onboarding@resend.dev`; con dominio verificato, es. `research@tuodominio.it` |
-| `MAIL_TO` | destinatario (es. chiamamial93@gmail.com) |
-| `GH_PAT` | Personal Access Token per auto-aggiornare la sessione (vedi sotto) |
+## Licenza
 
-**Perché serve `GH_PAT`:** i cookie di Google scadono se non vengono
-"rinfrescati". Il workflow li rinfresca e poi deve **riscrivere il secret**
-`NOTEBOOKLM_AUTH_JSON` con i cookie aggiornati — ma per scrivere un secret
-serve un token con quel permesso (il token di default di Actions è in sola
-lettura). Crea un **fine-grained PAT**:
-1. https://github.com/settings/personal-access-tokens/new
-2. **Repository access** → *Only select repositories* → `notebooklm_automation`
-3. **Permissions → Repository → Secrets** → *Read and write*
-4. Genera, copia il token e mettilo nel secret `GH_PAT`.
-
-Senza `GH_PAT` tutto funziona lo stesso, ma la sessione **non si auto-mantiene**:
-dovrai rifare il login e aggiornare `NOTEBOOKLM_AUTH_JSON` a mano quando scade.
-
-**Copia il contenuto dell'auth negli appunti** (macOS):
-```bash
-cat ~/.notebooklm/profiles/default/storage_state.json | pbcopy
-```
-Poi incollalo nel secret `NOTEBOOKLM_AUTH_JSON`.
-
-**Resend** (https://resend.com):
-1. crea un account gratuito (3.000 email/mese gratis)
-2. **API Keys → Create** → copia la key in `RESEND_API_KEY`
-3. Mittente:
-   - **per provare subito** usa `MAIL_FROM=onboarding@resend.dev` — funziona
-     SOLO verso l'email con cui ti sei registrato su Resend
-   - **per inviare a qualsiasi indirizzo** verifica un tuo dominio in Resend
-     (Domains → Add) e usa un indirizzo tipo `research@tuodominio.it`
-
-### 4. Fatto
-Il workflow [`daily-research.yml`](.github/workflows/daily-research.yml) gira ogni
-giorno alle **06:30 UTC**. Puoi anche lanciarlo a mano da **Actions →
-Daily NotebookLM Research → Run workflow** per provarlo subito.
-
----
-
-## ⚠️ Il limite onesto: scadenza della sessione
-
-I cookie di Google **non durano per sempre** e Google ruota il token di sessione
-con tempi suoi. La libreria tiene la sessione "calda", ma su GitHub Actions un job
-giornaliero da solo non basta. Per questo c'è
-[`keepalive.yml`](.github/workflows/keepalive.yml) che fa un refresh leggero
-ogni ~15 min.
-
-Resta un rischio reale: il cron di GitHub Actions è impreciso e gli IP del cloud
-potrebbero far scadere la sessione prima. Se noti che si rompe, hai due opzioni:
-
-**A) Keepalive sul Mac (più affidabile)** — fai girare il refresh sul tuo computer
-con `launchd` (puntuale, ogni 20 min). Crea
-`~/Library/LaunchAgents/com.notebooklm.refresh.plist`:
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.notebooklm.refresh</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/Users/alessandromazzola/.local/bin/notebooklm</string>
-    <string>auth</string><string>refresh</string>
-  </array>
-  <key>StartInterval</key><integer>1200</integer>
-  <key>RunAtLoad</key><true/>
-</dict></plist>
-```
-poi: `launchctl load ~/Library/LaunchAgents/com.notebooklm.refresh.plist`
-> Nota: in questo caso il refresh aggiorna il file locale; vai ricaricato come
-> secret quando rifai login. Per il keepalive puro va bene anche solo cloud.
-
-**B) Re-login a mano quando scade** — rilancia `notebooklm login`, poi riaggiorna
-il secret `NOTEBOOKLM_AUTH_JSON` con il nuovo `storage_state.json`.
-
-> È una libreria **non ufficiale**: può rompersi se Google cambia qualcosa.
-> Non è "metti e dimentica per sempre", ma per uso personale regge bene.
-
----
-
-## Provarlo in locale
-```bash
-RESEARCH_MODE=fast python3 daily_research.py     # senza email: stampa il report
-# con email:
-RESEND_API_KEY=re_xxx MAIL_FROM=onboarding@resend.dev MAIL_TO=tua@mail.it \
-  python3 daily_research.py
-```
+[MIT](LICENSE).

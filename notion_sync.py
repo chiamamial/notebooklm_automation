@@ -3,7 +3,6 @@
 Integrazione Notion (via REST API, solo libreria standard).
 
 Funzioni:
-- parse_news(markdown)          -> estrae le news dal brief
 - add_news_rows(token,db,items) -> crea una riga per news nel database
 - find_checked(token,db)        -> righe con "Scrivi articolo" spuntato e non Fatto
 - set_status / uncheck          -> aggiorna lo stato della riga
@@ -12,15 +11,15 @@ Funzioni:
 Variabili d'ambiente: NOTION_TOKEN, NOTION_DB_ID
 """
 
-import re
 import json
-import urllib.request
+import re
 import urllib.error
+import urllib.request
+
+import config
 
 API = "https://api.notion.com/v1"
 VERSION = "2022-06-28"
-
-import config
 
 ALLOWED_CATS = config.CATEGORIE_NOMI
 # match robusto: chiave senza spazi/punteggiatura -> nome esatto
@@ -37,7 +36,9 @@ def normalizza_categoria(testo):
 def _req(method, path, token, payload=None):
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(
-        API + path, data=data, method=method,
+        API + path,
+        data=data,
+        method=method,
         headers={
             "Authorization": f"Bearer {token}",
             "Notion-Version": VERSION,
@@ -48,73 +49,21 @@ def _req(method, path, token, payload=None):
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Notion {method} {path} -> {e.code}: {e.read().decode()[:300]}")
-
-
-# ---------- parsing del brief ----------
-
-_META = ("idee per titoli", "sul radar", "brief editoriale", "indice",
-         "sommario", "panoramica")
-
-
-def parse_news(md):
-    """Estrae le schede-news dal brief markdown. Tollerante alle variazioni
-    di formato di NotebookLM (etichette mancanti, livelli di heading diversi)."""
-    items = []
-    headings = list(re.finditer(r"(?m)^(#{1,6})\s+(.+)$", md))
-    for i, h in enumerate(headings):
-        level = len(h.group(1))
-        title = h.group(2).strip().strip("*").strip()
-        low = title.lower()
-        # salta sezioni meta e il titolo-documento (primo heading di livello 1)
-        if title.startswith(("💡", "📡")) or any(k in low for k in _META):
-            continue
-        if i == 0 and level == 1:
-            continue
-        start = h.end()
-        end = headings[i + 1].start() if i + 1 < len(headings) else len(md)
-        body = md[start:end]
-
-        def field(*labels):
-            for label in labels:
-                m = re.search(r"\*\*\s*" + label + r"\s*:?\s*\*\*\s*:?\s*(.+?)"
-                              r"(?=\n\s*[-*]\s*\*\*|\n#|\Z)", body, re.S | re.I)
-                if not m:
-                    m = re.search(label + r"\s*:\s*(.+?)(?=\n\s*[-*]|\n#|\Z)",
-                                  body, re.S | re.I)
-                if m:
-                    return re.sub(r"\s+", " ", m.group(1)).strip()
-            return ""
-
-        summary = field("Di cosa parla", "In breve", "Perché pubblicarlo")
-        categoria = field("Categoria").rstrip(".").strip()
-        fonte = field("Fonte", "Fonti")
-        # fallback: se manca il riassunto, usa il primo paragrafo della sezione
-        if not summary:
-            for para in re.split(r"\n\s*\n", body.strip()):
-                p = re.sub(r"\s+", " ", re.sub(r"^[-*]\s*", "", para)).strip()
-                if len(p) > 40 and not p.lower().startswith(("categoria", "fonte", "perché")):
-                    summary = p
-                    break
-        # è una news solo se ha almeno un contenuto utile
-        if not (summary or categoria or fonte):
-            continue
-        items.append({
-            "title": title[:200],
-            "summary": summary[:1900],
-            "categoria": normalizza_categoria(categoria),
-            "fonte": fonte[:1900],
-        })
-    return items
+        raise RuntimeError(f"Notion {method} {path} -> {e.code}: {e.read().decode()[:300]}") from e
 
 
 # ---------- scrittura righe ----------
 
+
 def _titoli_esistenti(token, db_id, day):
     """Titoli gia' presenti nel database per quel giorno (anti-duplicati)."""
     try:
-        res = _req("POST", f"/databases/{db_id}/query", token,
-                   {"filter": {"property": "Data", "date": {"equals": day}}, "page_size": 100})
+        res = _req(
+            "POST",
+            f"/databases/{db_id}/query",
+            token,
+            {"filter": {"property": "Data", "date": {"equals": day}}, "page_size": 100},
+        )
     except Exception:
         return set()
     out = set()
@@ -148,12 +97,17 @@ def add_news_rows(token, db_id, items, day):
 
 # ---------- watcher ----------
 
+
 def find_checked(token, db_id):
-    payload = {"filter": {"and": [
-        {"property": "Scrivi articolo", "checkbox": {"equals": True}},
-        {"property": "Stato", "select": {"does_not_equal": "Fatto"}},
-        {"property": "Stato", "select": {"does_not_equal": "In corso"}},
-    ]}}
+    payload = {
+        "filter": {
+            "and": [
+                {"property": "Scrivi articolo", "checkbox": {"equals": True}},
+                {"property": "Stato", "select": {"does_not_equal": "Fatto"}},
+                {"property": "Stato", "select": {"does_not_equal": "In corso"}},
+            ]
+        }
+    }
     res = _req("POST", f"/databases/{db_id}/query", token, payload)
     out = []
     for p in res.get("results", []):
@@ -163,20 +117,26 @@ def find_checked(token, db_id):
         fonte = "".join(t.get("plain_text", "") for t in props["Fonte"]["rich_text"])
         cat = props.get("Categoria", {}).get("select")
         m = re.search(r"https?://\S+", fonte)
-        out.append({"page_id": p["id"], "title": title, "summary": summary,
-                    "categoria": cat["name"] if cat else "",
-                    "fonte_url": m.group(0).rstrip(").,") if m else ""})
+        out.append(
+            {
+                "page_id": p["id"],
+                "title": title,
+                "summary": summary,
+                "categoria": cat["name"] if cat else "",
+                "fonte_url": m.group(0).rstrip(").,") if m else "",
+            }
+        )
     return out
 
 
 def urls_coperti(token, db_id, days=7):
     """URL delle fonti gia' presenti negli ultimi `days` giorni (anti-ripetizione)."""
     from datetime import date, timedelta
+
     since = (date.today() - timedelta(days=days)).isoformat()
     urls, cur = set(), None
     while True:
-        payload = {"filter": {"property": "Data", "date": {"on_or_after": since}},
-                   "page_size": 100}
+        payload = {"filter": {"property": "Data", "date": {"on_or_after": since}}, "page_size": 100}
         if cur:
             payload["start_cursor"] = cur
         res = _req("POST", f"/databases/{db_id}/query", token, payload)
@@ -211,8 +171,16 @@ def leggi_corpo_pubblico(token, page_id, max_chars=4000):
     `## SEO` (tutto cio' che segue e' privato). Usato per dare all'LLM il
     contenuto reale degli articoli da riassumere nel podcast."""
     righe = []
-    TIPI_TESTO = ("paragraph", "heading_1", "heading_2", "heading_3",
-                  "quote", "bulleted_list_item", "numbered_list_item", "callout")
+    TIPI_TESTO = (
+        "paragraph",
+        "heading_1",
+        "heading_2",
+        "heading_3",
+        "quote",
+        "bulleted_list_item",
+        "numbered_list_item",
+        "callout",
+    )
     for b in _blocchi_pagina(token, page_id):
         t = b.get("type")
         if t not in TIPI_TESTO:
@@ -222,7 +190,11 @@ def leggi_corpo_pubblico(token, page_id, max_chars=4000):
             continue
         # i heading "SEO/SOCIAL/IMMAGINI/NOTE FONTI" segnano l'inizio della parte privata
         if t.startswith("heading") and testo.strip("# ").upper() in (
-                "SEO", "SOCIAL", "IMMAGINI", "NOTE FONTI"):
+            "SEO",
+            "SOCIAL",
+            "IMMAGINI",
+            "NOTE FONTI",
+        ):
             break
         righe.append(testo)
         if sum(len(r) for r in righe) > max_chars:
@@ -235,12 +207,18 @@ def articoli_pubblicati(token, db_id, days=7, leggi_corpo=True):
     giorni. Restituisce title/summary/categoria/slug + (opzionale) corpo testuale.
     E' la base di partenza della puntata podcast settimanale."""
     from datetime import date, timedelta
+
     since = (date.today() - timedelta(days=days)).isoformat()
-    payload = {"filter": {"and": [
-        {"property": "Pubblica", "checkbox": {"equals": True}},
-        {"property": "Data pubblicazione", "date": {"on_or_after": since}},
-    ]}, "sorts": [{"property": "Data pubblicazione", "direction": "ascending"}],
-        "page_size": 100}
+    payload = {
+        "filter": {
+            "and": [
+                {"property": "Pubblica", "checkbox": {"equals": True}},
+                {"property": "Data pubblicazione", "date": {"on_or_after": since}},
+            ]
+        },
+        "sorts": [{"property": "Data pubblicazione", "direction": "ascending"}],
+        "page_size": 100,
+    }
     res = _req("POST", f"/databases/{db_id}/query", token, payload)
     out = []
     for p in res.get("results", []):
@@ -248,17 +226,22 @@ def articoli_pubblicati(token, db_id, days=7, leggi_corpo=True):
         title = "".join(t.get("plain_text", "") for t in props["Notizia"]["title"])
         if not title:
             continue
-        summary = "".join(t.get("plain_text", "") for t in
-                          props.get("Di cosa parla", {}).get("rich_text", []))
-        slug = "".join(t.get("plain_text", "") for t in
-                       props.get("Slug", {}).get("rich_text", []))
+        summary = "".join(
+            t.get("plain_text", "") for t in props.get("Di cosa parla", {}).get("rich_text", [])
+        )
+        slug = "".join(t.get("plain_text", "") for t in props.get("Slug", {}).get("rich_text", []))
         cat = props.get("Categoria", {}).get("select")
         corpo = leggi_corpo_pubblico(token, p["id"]) if leggi_corpo else ""
-        out.append({
-            "page_id": p["id"], "title": title.strip(), "summary": summary.strip(),
-            "categoria": cat["name"] if cat else "", "slug": slug.strip(),
-            "corpo": corpo,
-        })
+        out.append(
+            {
+                "page_id": p["id"],
+                "title": title.strip(),
+                "summary": summary.strip(),
+                "categoria": cat["name"] if cat else "",
+                "slug": slug.strip(),
+                "corpo": corpo,
+            }
+        )
     return out
 
 
@@ -275,8 +258,9 @@ def crea_episodio(token, podcast_db_id, ep):
         "Durata": {"rich_text": [{"text": {"content": ep.get("durata", "")[:50]}}]},
         "Articoli": {"rich_text": [{"text": {"content": articoli_txt[:1900]}}]},
     }
-    page = _req("POST", "/pages", token,
-                {"parent": {"database_id": podcast_db_id}, "properties": props})
+    page = _req(
+        "POST", "/pages", token, {"parent": {"database_id": podcast_db_id}, "properties": props}
+    )
     # copione completo nel corpo (utile come trascrizione/show-notes)
     if ep.get("copione"):
         append_markdown(token, page["id"], ep["copione"])
@@ -284,13 +268,16 @@ def crea_episodio(token, podcast_db_id, ep):
 
 
 def set_cover(token, page_id, url):
-    _req("PATCH", f"/pages/{page_id}", token,
-         {"properties": {"Copertina": {"url": url}}})
+    _req("PATCH", f"/pages/{page_id}", token, {"properties": {"Copertina": {"url": url}}})
 
 
 def set_slug(token, page_id, slug):
-    _req("PATCH", f"/pages/{page_id}", token,
-         {"properties": {"Slug": {"rich_text": [{"text": {"content": slug[:200]}}]}}})
+    _req(
+        "PATCH",
+        f"/pages/{page_id}",
+        token,
+        {"properties": {"Slug": {"rich_text": [{"text": {"content": slug[:200]}}]}}},
+    )
 
 
 def articoli_correlati(token, db_id, categoria, exclude_id="", limit=6):
@@ -298,11 +285,16 @@ def articoli_correlati(token, db_id, categoria, exclude_id="", limit=6):
     Sono i candidati per i link interni: l'AI puo' linkare solo questi."""
     if not categoria:
         return []
-    payload = {"page_size": 30, "filter": {"and": [
-        {"property": "Categoria", "select": {"equals": categoria}},
-        {"property": "Stato", "select": {"equals": "Fatto"}},
-        {"property": "Slug", "rich_text": {"is_not_empty": True}},
-    ]}}
+    payload = {
+        "page_size": 30,
+        "filter": {
+            "and": [
+                {"property": "Categoria", "select": {"equals": categoria}},
+                {"property": "Stato", "select": {"equals": "Fatto"}},
+                {"property": "Slug", "rich_text": {"is_not_empty": True}},
+            ]
+        },
+    }
     try:
         res = _req("POST", f"/databases/{db_id}/query", token, payload)
     except Exception:
@@ -321,33 +313,45 @@ def articoli_correlati(token, db_id, categoria, exclude_id="", limit=6):
 
 
 def set_status(token, page_id, status):
-    _req("PATCH", f"/pages/{page_id}", token,
-         {"properties": {"Stato": {"select": {"name": status}}}})
+    _req(
+        "PATCH", f"/pages/{page_id}", token, {"properties": {"Stato": {"select": {"name": status}}}}
+    )
 
 
 def uncheck(token, page_id):
-    _req("PATCH", f"/pages/{page_id}", token,
-         {"properties": {"Scrivi articolo": {"checkbox": False}}})
+    _req(
+        "PATCH",
+        f"/pages/{page_id}",
+        token,
+        {"properties": {"Scrivi articolo": {"checkbox": False}}},
+    )
 
 
 def righe_da_pulire(token, db_id, days=3):
     """News mai lavorate da archiviare: Stato='Da fare', non pubblicate e con
     `Data` piu' vecchia di `days` giorni. Ritorna [{page_id, title, data}]."""
     from datetime import date, timedelta
+
     cutoff = (date.today() - timedelta(days=days)).isoformat()
-    payload = {"filter": {"and": [
-        {"property": "Pubblica", "checkbox": {"equals": False}},
-        {"property": "Stato", "select": {"equals": "Da fare"}},
-        {"property": "Data", "date": {"on_or_before": cutoff}},
-    ]}, "page_size": 100}
+    payload = {
+        "filter": {
+            "and": [
+                {"property": "Pubblica", "checkbox": {"equals": False}},
+                {"property": "Stato", "select": {"equals": "Da fare"}},
+                {"property": "Data", "date": {"on_or_before": cutoff}},
+            ]
+        },
+        "page_size": 100,
+    }
     out, cur = [], None
     while True:
         if cur:
             payload["start_cursor"] = cur
         res = _req("POST", f"/databases/{db_id}/query", token, payload)
         for p in res.get("results", []):
-            title = "".join(t.get("plain_text", "")
-                            for t in p["properties"].get("Notizia", {}).get("title", []))
+            title = "".join(
+                t.get("plain_text", "") for t in p["properties"].get("Notizia", {}).get("title", [])
+            )
             data = (p["properties"].get("Data", {}).get("date") or {}).get("start", "")
             out.append({"page_id": p["id"], "title": title, "data": data})
         if not res.get("has_more"):
@@ -365,24 +369,26 @@ def _txt(content, bold=False, italic=False, link=None):
     """Uno o piu' oggetti rich_text (spezzati a 1900 char), con annotazioni."""
     out = []
     for i in range(0, len(content) or 1, 1900):
-        chunk = content[i:i + 1900]
+        chunk = content[i : i + 1900]
         t = {"content": chunk}
         if link:
             t["link"] = {"url": link}
-        out.append({
-            "type": "text",
-            "text": t,
-            "annotations": {"bold": bold, "italic": italic},
-        })
+        out.append(
+            {
+                "type": "text",
+                "text": t,
+                "annotations": {"bold": bold, "italic": italic},
+            }
+        )
     return out
 
 
 _INLINE = re.compile(
-    r"\[([^\]]+)\]\((https?://[^)\s]+)\)"   # 1,2  link [testo](url)
-    r"|\*\*(.+?)\*\*"                        # 3    **grassetto**
-    r"|__(.+?)__"                            # 4    __grassetto__
-    r"|\*(.+?)\*"                            # 5    *corsivo*
-    r"|_(.+?)_"                              # 6    _corsivo_
+    r"\[([^\]]+)\]\((https?://[^)\s]+)\)"  # 1,2  link [testo](url)
+    r"|\*\*(.+?)\*\*"  # 3    **grassetto**
+    r"|__(.+?)__"  # 4    __grassetto__
+    r"|\*(.+?)\*"  # 5    *corsivo*
+    r"|_(.+?)_"  # 6    _corsivo_
 )
 
 
@@ -392,7 +398,7 @@ def parse_inline(text):
     out, pos = [], 0
     for m in _INLINE.finditer(text):
         if m.start() > pos:
-            out += _txt(text[pos:m.start()])
+            out += _txt(text[pos : m.start()])
         if m.group(1) is not None:
             out += _txt(m.group(1), link=m.group(2))
         elif m.group(3) is not None:
@@ -427,8 +433,12 @@ def md_to_blocks(md):
         elif ls.startswith("> "):
             blocks.append({"type": "quote", "quote": {"rich_text": parse_inline(ls[2:])}})
         elif ls.startswith(("- ", "* ")):
-            blocks.append({"type": "bulleted_list_item",
-                           "bulleted_list_item": {"rich_text": parse_inline(ls[2:])}})
+            blocks.append(
+                {
+                    "type": "bulleted_list_item",
+                    "bulleted_list_item": {"rich_text": parse_inline(ls[2:])},
+                }
+            )
         else:
             blocks.append({"type": "paragraph", "paragraph": {"rich_text": parse_inline(s)}})
     return blocks
@@ -438,5 +448,4 @@ def append_markdown(token, page_id, md):
     blocks = md_to_blocks(md)
     # Notion: max 100 blocchi per richiesta
     for i in range(0, len(blocks), 90):
-        _req("PATCH", f"/blocks/{page_id}/children", token,
-             {"children": blocks[i:i + 90]})
+        _req("PATCH", f"/blocks/{page_id}/children", token, {"children": blocks[i : i + 90]})

@@ -35,7 +35,6 @@ fi
 echo "== 6. Timer systemd =="
 cp vps/notebooklm-*.service vps/notebooklm-*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now notebooklm-keepalive.timer
 systemctl enable --now notebooklm-research.timer
 systemctl enable --now notebooklm-watcher.timer
 systemctl enable --now notebooklm-podcast.timer

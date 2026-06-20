@@ -11,10 +11,10 @@ import random
 from datetime import date
 from pathlib import Path
 
+import config
 import kanri_engine as ke
 import notion_sync
-import config
-from daily_research import send_email
+from kanri_engine import send_email
 
 CATEGORIE = config.CATEGORIE_TESTO
 
@@ -32,10 +32,16 @@ _PRIORITA = config.get("priorita", [])
 FOCUS_GENERALE = (
     f"Seleziona le notizie PIÙ interessanti per {config.BRAND} (scarta gossip, "
     "tech generalista, pubblicità, doppioni).\n"
-    + (f"PRIORITÀ EDITORIALE: soprattutto {' e '.join(_PRIORITA)}; "
-       "il resto le altre categorie.\n" if _PRIORITA else "")
-    + (f"NON selezionare notizie di '{CATEGORIA_MUSICA}': sono gestite in una "
-       "passata separata." if MUSICA_DOMINI else "")
+    + (
+        f"PRIORITÀ EDITORIALE: soprattutto {' e '.join(_PRIORITA)}; il resto le altre categorie.\n"
+        if _PRIORITA
+        else ""
+    )
+    + (
+        f"NON selezionare notizie di '{CATEGORIA_MUSICA}': sono gestite in una passata separata."
+        if MUSICA_DOMINI
+        else ""
+    )
 )
 
 FOCUS_MUSICA = (
@@ -48,8 +54,10 @@ FOCUS_MUSICA = (
 
 
 def costruisci_prompt(items, n, focus):
-    righe = [f'[{i}] ({it["source"]}) {it["title"]} :: {it["summary"][:160]}'
-             for i, it in enumerate(items)]
+    righe = [
+        f"[{i}] ({it['source']}) {it['title']} :: {it['summary'][:160]}"
+        for i, it in enumerate(items)
+    ]
     return f"""Ecco le news dai feed (indice tra parentesi quadre):
 
 {chr(10).join(righe)}
@@ -79,9 +87,13 @@ def seleziona(items, n, focus):
         return []
     n = min(n, len(items))
     scelte = ke.llm_json(
-        [{"role": "system", "content": SYSTEM},
-         {"role": "user", "content": costruisci_prompt(items, n, focus)}],
-        max_tokens=8000, temperature=0.5)
+        [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": costruisci_prompt(items, n, focus)},
+        ],
+        max_tokens=8000,
+        temperature=0.5,
+    )
     return scelte or []
 
 
@@ -99,19 +111,23 @@ def aggiungi(scelte, fonte_items, notizie, righe_md, visti):
             continue
         visti.add(url)
         cat = notion_sync.normalizza_categoria(s.get("categoria", ""))
-        fonte = f'{src.get("source", "")} ({src.get("url", "")})'.strip()
-        notizie.append({
-            "title": s.get("titolo", src.get("title", ""))[:200],
-            "summary": s.get("di_cosa_parla", "")[:1900],
-            "categoria": cat,
-            "fonte": fonte[:1900],
-        })
+        fonte = f"{src.get('source', '')} ({src.get('url', '')})".strip()
+        notizie.append(
+            {
+                "title": s.get("titolo", src.get("title", ""))[:200],
+                "summary": s.get("di_cosa_parla", "")[:1900],
+                "categoria": cat,
+                "fonte": fonte[:1900],
+            }
+        )
         righe_md += [
-            f'## {s.get("titolo", "")}',
-            f'- **Di cosa parla:** {s.get("di_cosa_parla", "")}',
-            f'- **Perché pubblicarlo:** {s.get("perche", "")}',
-            f'- **Categoria:** {cat or "—"}',
-            f'- **Fonte:** {fonte}', ""]
+            f"## {s.get('titolo', '')}",
+            f"- **Di cosa parla:** {s.get('di_cosa_parla', '')}",
+            f"- **Perché pubblicarlo:** {s.get('perche', '')}",
+            f"- **Categoria:** {cat or '—'}",
+            f"- **Fonte:** {fonte}",
+            "",
+        ]
 
 
 def main():
@@ -122,9 +138,11 @@ def main():
 
     # cap basso per feed (no monopolio di chi pubblica tantissimo, es. Dezeen)
     # e finestra ampia (i feed lenti, es. Giappone, fanno comunque in tempo).
-    items = ke.fetch_rss_items(str(feeds),
-                               max_age_days=config.get("brief.max_age_days", 7),
-                               per_feed=config.get("brief.per_feed", 4))
+    items = ke.fetch_rss_items(
+        str(feeds),
+        max_age_days=config.get("brief.max_age_days", 7),
+        per_feed=config.get("brief.per_feed", 4),
+    )
     print(f"RSS: {len(items)} news raccolte", flush=True)
 
     # anti-ripetizione: scarta le news gia' coperte negli ultimi 7 giorni
@@ -132,7 +150,10 @@ def main():
     if nt and ndb:
         coperti = notion_sync.urls_coperti(nt, ndb, days=7)
         items = [it for it in items if it["url"].rstrip("/") not in coperti]
-        print(f"  dopo anti-ripetizione: {len(items)} news nuove ({len(coperti)} gia' coperte)", flush=True)
+        print(
+            f"  dopo anti-ripetizione: {len(items)} news nuove ({len(coperti)} gia' coperte)",
+            flush=True,
+        )
     if not items:
         raise SystemExit("nessuna news nuova dai feed")
 
@@ -165,8 +186,9 @@ def main():
 
     # email
     body = "\n".join(righe_md)
-    send_email(f"🗞️ Brief {config.BRAND} {today} — {len(notizie)} news", body,
-               _scrivi_file(today, body))
+    send_email(
+        f"🗞️ Brief {config.BRAND} {today} — {len(notizie)} news", body, _scrivi_file(today, body)
+    )
 
 
 def _scrivi_file(today, body):
@@ -179,6 +201,7 @@ if __name__ == "__main__":
     import time
     import traceback
     from datetime import date as _date
+
     for _tentativo in range(2):
         try:
             main()
@@ -190,7 +213,9 @@ if __name__ == "__main__":
                 print("Brief fallito, riprovo tra 120s...", flush=True)
                 time.sleep(120)
                 continue
-            ke.alert(f"⚠️ Brief {config.BRAND} FALLITO — {_date.today().isoformat()}",
-                     "Il brief di oggi non è stato generato dopo 2 tentativi.\n\n"
-                     + traceback.format_exc())
+            ke.alert(
+                f"⚠️ Brief {config.BRAND} FALLITO — {_date.today().isoformat()}",
+                "Il brief di oggi non è stato generato dopo 2 tentativi.\n\n"
+                + traceback.format_exc(),
+            )
             raise

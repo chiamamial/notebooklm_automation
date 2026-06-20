@@ -23,7 +23,7 @@ _PATH = os.environ.get("BLOG_CONFIG", str(Path(__file__).parent / "blog.config.j
 try:
     CONFIG = json.loads(Path(_PATH).read_text(encoding="utf-8"))
 except Exception as e:
-    raise RuntimeError(f"Config blog non caricabile da {_PATH}: {e}")
+    raise RuntimeError(f"Config blog non caricabile da {_PATH}: {e}") from e
 
 
 def get(path, default=None):

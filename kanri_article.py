@@ -9,14 +9,14 @@ Funzione principale: genera_articolo(titolo, contesto) -> markdown
 Usata dal controllore Notion (notion_watcher.py).
 """
 
-import re
 import os
+import re
 import sys
 from pathlib import Path
 
+import config
 import kanri_engine as ke
 import notion_sync
-import config
 
 SYSTEM = (
     f"Sei la firma di {config.BRAND}, {config.FIRMA}. Scrivi in modo "
@@ -58,12 +58,14 @@ def esegui_ricerca_seo(titolo, contesto=""):
     if not risultati:
         return ""
 
-    snippet_text = "\n\n".join([
-        f"Titolo: {r.get('title', '')}\n"
-        f"URL: {r.get('url', '')}\n"
-        f"Contenuto: {r.get('content', '')}"
-        for r in risultati
-    ])
+    snippet_text = "\n\n".join(
+        [
+            f"Titolo: {r.get('title', '')}\n"
+            f"URL: {r.get('url', '')}\n"
+            f"Contenuto: {r.get('content', '')}"
+            for r in risultati
+        ]
+    )
 
     system_seo = (
         "Sei un esperto SEO e analista di dati di ricerca. Il tuo compito è individuare le parole chiave "
@@ -103,6 +105,7 @@ def estrai_slug(md):
 
 def _slugify(t):
     import unicodedata
+
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", t.lower())).strip("-")[:80]
 
@@ -136,9 +139,9 @@ def genera_articolo(titolo, contesto="", fonte_url="", categoria="", exclude_id=
             break
         url = r.get("url", "")
         if not url or url.rstrip("/") == fonte_url.rstrip("/"):
-            continue                                   # gia' inclusa (originale)
+            continue  # gia' inclusa (originale)
         if float(r.get("score", 1)) < 0.4:
-            continue                                   # poco pertinente: scarta
+            continue  # poco pertinente: scarta
         md = ke.firecrawl_scrape(url)
         text = md if (md and len(md) > 400) else r.get("content", "")
         if text:
@@ -146,25 +149,31 @@ def genera_articolo(titolo, contesto="", fonte_url="", categoria="", exclude_id=
 
     if not fonti:
         for r in risultati[:n_fonti]:
-            fonti.append({"title": r.get("title", ""), "url": r.get("url", ""),
-                          "text": r.get("content", "")})
+            fonti.append(
+                {"title": r.get("title", ""), "url": r.get("url", ""), "text": r.get("content", "")}
+            )
 
     # 3. sintesi
     formato = (Path(__file__).parent / "article_instructions.txt").read_text(encoding="utf-8")
     has_orig = bool(fonte_url and fonti and fonti[0]["url"] == fonte_url)
     blocchi = "\n\n".join(
-        f'### FONTE {i+1}{" (ORIGINALE — da cui nasce la notizia)" if (i == 0 and has_orig) else ""}: '
-        f'{f["title"]}\nURL: {f["url"]}\n{f["text"]}'
-        for i, f in enumerate(fonti))
+        f"### FONTE {i + 1}{' (ORIGINALE — da cui nasce la notizia)' if (i == 0 and has_orig) else ''}: "
+        f"{f['title']}\nURL: {f['url']}\n{f['text']}"
+        for i, f in enumerate(fonti)
+    )
     nota_orig = (
-        f"\nLa FONTE 1 è l'ORIGINALE. Valuta: se è un contenuto esclusivo di quella "
-        f"testata (intervista, profilo d'autore, reportage, scoop), ATTRIBUISCILA nel "
-        f"corpo. In tal caso il nome della testata DEVE essere un link markdown che "
-        f"punta ESATTAMENTE a questo URL: {fonte_url}\n"
-        f"Esempio: 'come racconta in un post per [Printmag]({fonte_url})'.\n"
-        f"Se invece le altre fonti riportano lo stesso fatto in modo equivalente, è "
-        f"notizia generale: niente attribuzione singola.\n"
-    ) if has_orig else ""
+        (
+            f"\nLa FONTE 1 è l'ORIGINALE. Valuta: se è un contenuto esclusivo di quella "
+            f"testata (intervista, profilo d'autore, reportage, scoop), ATTRIBUISCILA nel "
+            f"corpo. In tal caso il nome della testata DEVE essere un link markdown che "
+            f"punta ESATTAMENTE a questo URL: {fonte_url}\n"
+            f"Esempio: 'come racconta in un post per [Printmag]({fonte_url})'.\n"
+            f"Se invece le altre fonti riportano lo stesso fatto in modo equivalente, è "
+            f"notizia generale: niente attribuzione singola.\n"
+        )
+        if has_orig
+        else ""
+    )
     seo_instructions = ""
     if seo_report:
         seo_instructions = (
@@ -186,14 +195,15 @@ def genera_articolo(titolo, contesto="", fonte_url="", categoria="", exclude_id=
     if nt and ndb and categoria:
         correlati = notion_sync.articoli_correlati(nt, ndb, categoria, exclude_id, limit=6)
         if correlati:
-            righe = "\n".join(f'- [{c["title"]}](/articolo/{c["slug"]})' for c in correlati)
+            righe = "\n".join(f"- [{c['title']}](/articolo/{c['slug']})" for c in correlati)
             link_block = (
                 "--- ARTICOLI CORRELATI (per i LINK INTERNI) ---\n"
                 f"Questi sono articoli {config.BRAND} già pubblicati. Se — e SOLO se — uno è "
                 "davvero pertinente al tema, inserisci un link interno nel corpo usando "
                 "ESATTAMENTE il markdown qui sotto (max 2-3 link, in modo naturale). "
                 "Se nessuno è pertinente, NON metterne. NON inventare altri link interni.\n"
-                f"{righe}\n\n")
+                f"{righe}\n\n"
+            )
 
     user = (
         f"ARGOMENTO (la notizia da approfondire): {titolo}\n"
