@@ -185,7 +185,8 @@ def main():
     print(f"TTS: voce generata ({voce_mp3.stat().st_size // 1024} KB) con {voce}", flush=True)
 
     # 2b. mix con sottofondo musicale (intro pulita + ducking + fade out)
-    bg = os.environ.get("PODCAST_BG_MUSIC", str(Path(__file__).parent / "assets" / "kanri-bed.mp3"))
+    # PODCAST_BG_MUSIC vuota (o assente) = usa la traccia del repo.
+    bg = os.environ.get("PODCAST_BG_MUSIC") or str(Path(__file__).parent / "assets" / "kanri-bed.mp3")
     if shutil.which("ffmpeg") and os.path.exists(bg):
         ke.mix_audio(
             str(voce_mp3),
