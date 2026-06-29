@@ -208,8 +208,17 @@ def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None, thin
     return "".join(p.get("text", "") for p in parts)
 
 
+def _ordine_modelli():
+    """Ordine dei modelli free da provare: il primario (se impostato) e poi gli
+    altri fallback. Condiviso da article_llm e llm_json."""
+    primary = os.environ.get("OPENROUTER_MODEL")
+    return ([primary] if primary else []) + [m for m in FALLBACK_MODELS if m != primary]
+
+
 def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True):
-    """Scrive l'articolo: usa Gemini se la chiave c'e', altrimenti OpenRouter."""
+    """Scrive l'articolo: usa Gemini se la chiave c'e', altrimenti OpenRouter.
+    Su OpenRouter prova in sequenza tutti i modelli free, cosi' un 429/limite
+    upstream su un modello non blocca la generazione."""
     if os.environ.get("GEMINI_API_KEY"):
         try:
             txt = gemini_chat(system, user, max_tokens, temperature, thinking=thinking)
@@ -217,19 +226,25 @@ def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True):
                 return txt
         except Exception as e:
             print(f"  (Gemini fallito, uso OpenRouter: {repr(e)[:120]})", flush=True)
-    return openrouter_chat(
-        [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        max_tokens,
-        temperature,
-    )
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    last = ""
+    for model in _ordine_modelli():
+        try:
+            txt = openrouter_chat(messages, max_tokens, temperature, retries=1, model=model)
+            if txt and txt.strip():
+                print(f"  (modello usato: {model})", flush=True)
+                return txt
+            last = f"{model}: risposta vuota"
+        except Exception as e:
+            last = f"{model}: {repr(e)[:100]}"
+            print(f"  (scarto {model}: {last})", flush=True)
+    raise RuntimeError(f"tutti i modelli OpenRouter falliti -> {last}")
 
 
 def llm_json(messages, max_tokens=8000, temperature=0.4):
     """Ottiene un JSON dall'LLM provando piu' modelli free finche' uno funziona."""
-    primary = os.environ.get("OPENROUTER_MODEL")
-    ordine = ([primary] if primary else []) + [m for m in FALLBACK_MODELS if m != primary]
     last = ""
-    for model in ordine:
+    for model in _ordine_modelli():
         try:
             out = openrouter_chat(messages, max_tokens, temperature, retries=1, model=model)
             data = extract_json(out)
