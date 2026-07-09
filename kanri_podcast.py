@@ -68,7 +68,7 @@ def genera_audio(copione, out_mp3):
                 ke.tts_elevenlabs(copione, out_mp3)
                 return f"ElevenLabs/{voce}"
             except Exception as e:
-                print(f"  (ElevenLabs fallito, provo altri motori: {repr(e)[:140]})", flush=True)
+                print(f"  (ElevenLabs fallito, provo altri motori: {repr(e)[:220]})", flush=True)
         else:
             print("  (ElevenLabs: quota mensile insufficiente, uso fallback)", flush=True)
     if os.environ.get("GOOGLE_TTS_API_KEY"):

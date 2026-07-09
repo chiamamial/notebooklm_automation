@@ -475,19 +475,39 @@ def elevenlabs_crediti_residui(api_key=None):
         return None
 
 
-def tts_elevenlabs(text, out_mp3, voice_id=None, model_id=None, api_key=None):
+def tts_elevenlabs(text, out_mp3, voice_id=None, model_id=None, api_key=None, retries=3):
     """Sintetizza `text` in mp3 con ElevenLabs. Le puntate sono brevi (entro il
-    limite per richiesta), quindi una sola chiamata. Restituisce il percorso."""
+    limite per richiesta), quindi una sola chiamata. I rifiuti del piano free
+    sono spesso transitori (picchi di carico): riprova con attese crescenti,
+    tranne quando la quota mensile e' davvero esaurita. Restituisce il percorso."""
     key = api_key or os.environ["ELEVENLABS_API_KEY"]
     voice_id = voice_id or os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
     model_id = model_id or os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128"
-    audio = _post_bytes(url, {"text": text, "model_id": model_id}, {"xi-api-key": key})
-    with open(out_mp3, "wb") as f:
-        f.write(audio)
-    if os.path.getsize(out_mp3) == 0:
-        raise RuntimeError("ElevenLabs non ha prodotto audio (file vuoto)")
-    return out_mp3
+    last = ""
+    for attempt in range(retries + 1):
+        try:
+            audio = _post_bytes(url, {"text": text, "model_id": model_id}, {"xi-api-key": key})
+            if not audio:
+                raise RuntimeError("ElevenLabs non ha prodotto audio (risposta vuota)")
+            with open(out_mp3, "wb") as f:
+                f.write(audio)
+            return out_mp3
+        except urllib.error.HTTPError as e:
+            try:
+                corpo = e.read().decode()[:200]
+            except Exception:
+                corpo = ""
+            last = f"{e.code}: {corpo}"
+            if "quota_exceeded" in corpo:
+                break  # quota mensile finita: riprovare non serve
+        except Exception as e:
+            last = repr(e)[:200]
+        if attempt < retries:
+            wait = 120 * (2**attempt)  # 2m, 4m, 8m: i picchi di carico del free tier passano
+            print(f"  (ElevenLabs {last} — riprovo tra {wait}s)", flush=True)
+            time.sleep(wait)
+    raise RuntimeError(f"ElevenLabs fallito: {last}")
 
 
 # ---------- Google Cloud Text-to-Speech (voci Chirp 3 HD) ----------
