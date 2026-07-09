@@ -198,7 +198,9 @@ def main():
 
     # 2b. mix con sottofondo musicale (intro pulita + ducking + fade out)
     # PODCAST_BG_MUSIC vuota (o assente) = usa la traccia del repo.
-    bg = os.environ.get("PODCAST_BG_MUSIC") or str(Path(__file__).parent / "assets" / "kanri-bed.mp3")
+    bg = os.environ.get("PODCAST_BG_MUSIC") or str(
+        Path(__file__).parent / "assets" / "kanri-bed.mp3"
+    )
     if mp3.exists() and mp3.stat().st_size > 0:
         print(f"Mix: riuso l'audio del tentativo precedente ({mp3})", flush=True)
     elif shutil.which("ffmpeg") and os.path.exists(bg):
