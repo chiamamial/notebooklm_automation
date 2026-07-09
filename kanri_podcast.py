@@ -151,27 +151,36 @@ def main():
     if not articoli:
         raise SystemExit("nessun articolo pubblicato questa settimana: niente puntata")
 
-    # 1. copione
-    # thinking=False: i modelli Gemini 2.5 altrimenti consumano il budget di
-    # output ragionando e troncano il copione.
-    copione = ke.article_llm(
-        SYSTEM,
-        costruisci_prompt(articoli, settimana),
-        max_tokens=2000,
-        temperature=0.6,
-        thinking=False,
-    ).strip()
-    copione = _pulisci_copione(copione)
-    if len(copione.split()) < 60:
-        raise RuntimeError(f"copione troppo corto ({len(copione.split())} parole)")
-    # tetto caratteri: protegge la quota mensile di ElevenLabs free
-    max_chars = int(os.environ.get("PODCAST_MAX_CHARS", MAX_CHARS_DEFAULT))
-    prima = len(copione)
-    copione = taglia_a_caratteri(copione, max_chars)
-    if len(copione) < prima:
-        print(
-            f"  (copione troncato da {prima} a {len(copione)} caratteri per la quota)", flush=True
-        )
+    # 1. copione — i file di giornata fanno da checkpoint: se un tentativo
+    # precedente e' arrivato fin qui, si riusa il risultato invece di
+    # riconsumare quota LLM/TTS (es. quando fallisce solo l'upload).
+    txt = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.txt")
+    if txt.exists() and txt.stat().st_size > 0:
+        copione = txt.read_text(encoding="utf-8").strip()
+        print(f"Copione: riuso il checkpoint del tentativo precedente ({txt})", flush=True)
+    else:
+        # thinking=False: i modelli Gemini 2.5 altrimenti consumano il budget di
+        # output ragionando e troncano il copione.
+        copione = ke.article_llm(
+            SYSTEM,
+            costruisci_prompt(articoli, settimana),
+            max_tokens=2000,
+            temperature=0.6,
+            thinking=False,
+        ).strip()
+        copione = _pulisci_copione(copione)
+        if len(copione.split()) < 60:
+            raise RuntimeError(f"copione troppo corto ({len(copione.split())} parole)")
+        # tetto caratteri: protegge la quota mensile di ElevenLabs free
+        max_chars = int(os.environ.get("PODCAST_MAX_CHARS", MAX_CHARS_DEFAULT))
+        prima = len(copione)
+        copione = taglia_a_caratteri(copione, max_chars)
+        if len(copione) < prima:
+            print(
+                f"  (copione troncato da {prima} a {len(copione)} caratteri per la quota)",
+                flush=True,
+            )
+        txt.write_text(copione, encoding="utf-8")
     durata = stima_durata(copione)
     print(
         f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})",
@@ -181,13 +190,18 @@ def main():
     # 2. audio (voce)
     mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.mp3")
     voce_mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.voce.mp3")
-    voce = genera_audio(copione, str(voce_mp3))
-    print(f"TTS: voce generata ({voce_mp3.stat().st_size // 1024} KB) con {voce}", flush=True)
+    if voce_mp3.exists() and voce_mp3.stat().st_size > 0:
+        print(f"TTS: riuso la voce del tentativo precedente ({voce_mp3})", flush=True)
+    else:
+        voce = genera_audio(copione, str(voce_mp3))
+        print(f"TTS: voce generata ({voce_mp3.stat().st_size // 1024} KB) con {voce}", flush=True)
 
     # 2b. mix con sottofondo musicale (intro pulita + ducking + fade out)
     # PODCAST_BG_MUSIC vuota (o assente) = usa la traccia del repo.
     bg = os.environ.get("PODCAST_BG_MUSIC") or str(Path(__file__).parent / "assets" / "kanri-bed.mp3")
-    if shutil.which("ffmpeg") and os.path.exists(bg):
+    if mp3.exists() and mp3.stat().st_size > 0:
+        print(f"Mix: riuso l'audio del tentativo precedente ({mp3})", flush=True)
+    elif shutil.which("ffmpeg") and os.path.exists(bg):
         ke.mix_audio(
             str(voce_mp3),
             bg,
@@ -241,9 +255,7 @@ def main():
     elif not pdb:
         print("  (PODCAST_DB_ID non impostata: salto il salvataggio su Notion)", flush=True)
 
-    # 5. email di notifica con copione in allegato
-    txt = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.txt")
-    txt.write_text(copione, encoding="utf-8")
+    # 5. email di notifica con copione in allegato (il .txt e' gia' su disco)
     corpo_mail = (
         f"# {titolo}\n\nDurata stimata: {durata}\n"
         f"Articoli: {len(articoli)}\n"
@@ -273,8 +285,10 @@ if __name__ == "__main__":
             raise  # "nessun articolo" non è un errore
         except Exception:
             if _tentativo == 0:
-                print("Podcast fallito, riprovo tra 120s...", flush=True)
-                time.sleep(120)
+                # 5 minuti: i fallimenti tipici (coda archive.org, rate limit)
+                # non rientrano in 2. I checkpoint rendono il retry economico.
+                print("Podcast fallito, riprovo tra 300s...", flush=True)
+                time.sleep(300)
                 continue
             ke.alert(
                 f"⚠️ {PODCAST_NOME} FALLITO — {date.today().isoformat()}",

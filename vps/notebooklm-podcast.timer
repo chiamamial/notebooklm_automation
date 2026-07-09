@@ -2,8 +2,11 @@
 Description=Lancia KANRI Audio ogni lunedì mattina
 
 [Timer]
-# Ora locale del VPS (fuso Europe/Rome). Lunedì alle 08:00.
-OnCalendar=Mon *-*-* 08:00:00
+# Ora locale del VPS (fuso Europe/Rome). Lunedì alle 12:00: lontano dalla
+# research delle 07:00 (che consuma le quote LLM del giorno), dopo il reset
+# della quota Gemini (mezzanotte Pacific = 09:00 CEST) e alle 3 di notte USA,
+# quando la coda di archive.org è scarica.
+OnCalendar=Mon *-*-* 12:00:00
 Persistent=true
 
 [Install]

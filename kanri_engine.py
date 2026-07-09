@@ -38,14 +38,36 @@ def _post(url, payload, headers, timeout=120):
 
 # ---------- OpenRouter ----------
 
-# Modelli free di riserva (provati in ordine se quello primario fallisce)
+# Modelli free di riserva (provati in ordine se quello primario fallisce).
+# La lista viene integrata a runtime con i modelli :free scoperti via API,
+# cosi' un modello ritirato (404) non lascia buchi.
 FALLBACK_MODELS = [
     "openai/gpt-oss-120b:free",
-    "z-ai/glm-4.5-air:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "qwen/qwen3-next-80b-a3b-instruct:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
 ]
+
+_FREE_MODELS_CACHE = None
+
+
+def openrouter_free_models():
+    """Modelli :free attualmente disponibili su OpenRouter (API /models).
+    In caso di errore ritorna lista vuota: si va avanti con la lista statica."""
+    global _FREE_MODELS_CACHE
+    if _FREE_MODELS_CACHE is None:
+        try:
+            req = urllib.request.Request(
+                "https://openrouter.ai/api/v1/models", headers={"User-Agent": UA}
+            )
+            with urllib.request.urlopen(req, timeout=30) as r:
+                d = json.load(r)
+            _FREE_MODELS_CACHE = [
+                m.get("id", "") for m in d.get("data", []) if m.get("id", "").endswith(":free")
+            ]
+        except Exception:
+            _FREE_MODELS_CACHE = []
+    return _FREE_MODELS_CACHE
 
 
 def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=1, model=None):
@@ -209,10 +231,13 @@ def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None, thin
 
 
 def _ordine_modelli():
-    """Ordine dei modelli free da provare: il primario (se impostato) e poi gli
-    altri fallback. Condiviso da article_llm e llm_json."""
+    """Ordine dei modelli free da provare: il primario (se impostato), i
+    fallback statici, poi qualche modello :free scoperto via API (tetto per
+    non allungare troppo il giro). Condiviso da article_llm e llm_json."""
     primary = os.environ.get("OPENROUTER_MODEL")
-    return ([primary] if primary else []) + [m for m in FALLBACK_MODELS if m != primary]
+    ordine = ([primary] if primary else []) + [m for m in FALLBACK_MODELS if m != primary]
+    extra = [m for m in openrouter_free_models() if m not in ordine]
+    return ordine + extra[:8]
 
 
 def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True):
@@ -530,10 +555,12 @@ def tts_google(
 # ---------- Internet Archive (hosting audio gratuito con API) ----------
 
 
-def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=None, retries=2):
+def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=None, retries=4):
     """Carica un file su archive.org e restituisce l'URL pubblico diretto.
     Le chiavi S3 si generano (gratis) su https://archive.org/account/s3.php
-    e vanno in ARCHIVE_ACCESS_KEY / ARCHIVE_SECRET_KEY."""
+    e vanno in ARCHIVE_ACCESS_KEY / ARCHIVE_SECRET_KEY.
+    La coda di archive.org a volte e' satura ("total_tasks_queued exceeds
+    global_limit") per decine di minuti: backoff esponenziale, non 20s fissi."""
     import internetarchive as ia
 
     access_key = access_key or os.environ["ARCHIVE_ACCESS_KEY"]
@@ -559,7 +586,9 @@ def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=N
         except Exception as e:
             last = repr(e)[:200]
         if attempt < retries:
-            time.sleep(20)
+            wait = 60 * (2**attempt)  # 60s, 2m, 4m, 8m: la coda si svuota in decine di minuti
+            print(f"  (upload archive.org fallito: {last} — riprovo tra {wait}s)", flush=True)
+            time.sleep(wait)
     raise RuntimeError(f"upload su Internet Archive fallito: {last}")
 
 
