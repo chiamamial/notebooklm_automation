@@ -39,13 +39,16 @@ def _post(url, payload, headers, timeout=120):
 # ---------- OpenRouter ----------
 
 # Modelli free di riserva (provati in ordine se quello primario fallisce).
-# La lista viene integrata a runtime con i modelli :free scoperti via API,
-# cosi' un modello ritirato (404) non lascia buchi.
+# La lista viene integrata a runtime con i modelli :free scoperti via API e
+# filtrata di quelli ritirati, cosi' un 404 non lascia buchi.
+# NB: nemotron sta per ultimo perche' scarica la catena di ragionamento dentro
+# il contenuto (vedi il parametro `valida` di article_llm).
 FALLBACK_MODELS = [
-    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "z-ai/glm-5.2:free",
+    "openai/gpt-oss-20b:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
 ]
 
 _FREE_MODELS_CACHE = None
@@ -78,6 +81,10 @@ def openrouter_chat(messages, max_tokens=4000, temperature=0.6, retries=1, model
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
+        # non vogliamo i token di ragionamento: per i modelli che lo tengono in
+        # un campo separato basta questo (quelli che lo mescolano al contenuto
+        # vanno scartati a valle, vedi `valida` in article_llm)
+        "reasoning": {"exclude": True},
     }
     headers = {"Authorization": f"Bearer {key}", "X-Title": "KANRI"}
     last = ""
@@ -233,22 +240,39 @@ def gemini_chat(system, user, max_tokens=8000, temperature=0.6, model=None, thin
 def _ordine_modelli():
     """Ordine dei modelli free da provare: il primario (se impostato), i
     fallback statici, poi qualche modello :free scoperto via API (tetto per
-    non allungare troppo il giro). Condiviso da article_llm e llm_json."""
+    non allungare troppo il giro). I modelli :free non piu' in catalogo vengono
+    saltati: darebbero 404 bruciando un tentativo. Condiviso con llm_json."""
     primary = os.environ.get("OPENROUTER_MODEL")
     ordine = ([primary] if primary else []) + [m for m in FALLBACK_MODELS if m != primary]
-    extra = [m for m in openrouter_free_models() if m not in ordine]
-    return ordine + extra[:8]
+    liberi = openrouter_free_models()
+    if liberi:
+        # i modelli a pagamento non compaiono nella lista dei :free: non filtrarli
+        vivi = [m for m in ordine if not m.endswith(":free") or m in liberi]
+        ordine = vivi or ordine
+        ordine += [m for m in liberi if m not in ordine][:8]
+    return ordine
 
 
-def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True):
+def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True, valida=None):
     """Scrive l'articolo: usa Gemini se la chiave c'e', altrimenti OpenRouter.
     Su OpenRouter prova in sequenza tutti i modelli free, cosi' un 429/limite
-    upstream su un modello non blocca la generazione."""
+    upstream su un modello non blocca la generazione.
+
+    `valida`: callable(testo) -> bool. Se fornita, una risposta che non la passa
+    viene SCARTATA e si prova il modello successivo. Serve contro i modelli che
+    mescolano la catena di ragionamento al contenuto: senza questo controllo
+    l'output finisce nel prodotto finale (era il bug del copione podcast)."""
+
+    def _ok(txt):
+        return bool(txt and txt.strip()) and (valida is None or valida(txt))
+
     if os.environ.get("GEMINI_API_KEY"):
         try:
             txt = gemini_chat(system, user, max_tokens, temperature, thinking=thinking)
-            if txt and txt.strip():
+            if _ok(txt):
                 return txt
+            if txt and txt.strip():
+                print("  (Gemini: risposta scartata dalla validazione)", flush=True)
         except Exception as e:
             print(f"  (Gemini fallito, uso OpenRouter: {repr(e)[:120]})", flush=True)
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -256,10 +280,14 @@ def article_llm(system, user, max_tokens=8000, temperature=0.6, thinking=True):
     for model in _ordine_modelli():
         try:
             txt = openrouter_chat(messages, max_tokens, temperature, retries=1, model=model)
-            if txt and txt.strip():
+            if _ok(txt):
                 print(f"  (modello usato: {model})", flush=True)
                 return txt
-            last = f"{model}: risposta vuota"
+            last = f"{model}: " + (
+                "scartato dalla validazione" if txt.strip() else "risposta vuota"
+            )
+            print(f"  (scarto {model}: {last})", flush=True)
+            continue
         except Exception as e:
             last = f"{model}: {repr(e)[:100]}"
             print(f"  (scarto {model}: {last})", flush=True)

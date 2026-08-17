@@ -73,3 +73,66 @@ def test_taglia_a_caratteri_su_confine_frase():
 def test_pulisci_copione_toglie_markdown():
     out = kp._pulisci_copione("# Titolo\n\n- punto\n**ciao** mondo\nINTRO:\n")
     assert "#" not in out and "*" not in out and "- punto" not in out
+
+
+# --- validazione del copione (bug del 3 e 17 agosto 2026: la sintesi vocale
+# leggeva il ragionamento del modello invece del copione) ---
+
+COPIONE_BUONO = (
+    "KANRI Tape, settimana dal dieci al diciassette agosto duemilaventisei. "
+    "Questa settimana il filo conduttore è il ritorno dell'artigianato nel design "
+    "contemporaneo. Il produttore giapponese ha presentato una cabina in acciaio "
+    "pensata per offrire sollievo dal caldo estremo, con un sistema di "
+    "raffreddamento che non richiede energia esterna. Poi il festival della stampa "
+    "sperimentale torna per il terzo anno con laboratori aperti al pubblico e "
+    "inchiostri ricavati dalle alghe. E infine una collezione di mobili che unisce "
+    "linee sobrie e motivi tessili della tradizione. Trovate tutti gli articoli "
+    "sul sito della rivista, buon ascolto e buona lettura."
+)
+
+RAGIONAMENTO = (
+    "We need to produce a spoken script, ~300-350 words, about the week. "
+    "Must not invent facts beyond provided. We must avoid markdown and bullet "
+    "points. Let's craft the text now and count the words carefully before "
+    "answering the user with the final Italian script for the podcast episode. "
+    "We should select three or four articles and give each one a couple of "
+    "sentences, then close with an invitation to read the magazine online. "
+    "The user wants plain text only, so no symbols and no headings at all."
+)
+
+
+def test_valida_copione_accetta_italiano_parlato():
+    ok, motivo = kp._valida_copione(COPIONE_BUONO)
+    assert ok, motivo
+
+
+def test_valida_copione_rifiuta_ragionamento_del_modello():
+    ok, motivo = kp._valida_copione(RAGIONAMENTO)
+    assert not ok and "ragionamento" in motivo
+
+
+def test_valida_copione_rifiuta_inglese_senza_marcatori():
+    inglese = (
+        "The Japanese manufacturer presented a stainless steel cabin designed to "
+        "offer immediate relief from extreme heat. The unit is portable and can be "
+        "placed in public spaces, using a passive cooling system that requires no "
+        "external power source at all, with clear signage for emergency use today. "
+        "The printing festival returns for a third year with open workshops and "
+        "inks made from algae, while a furniture collection blends sober lines "
+        "with traditional textile motifs from South Asia and solid wood frames."
+    )
+    ok, motivo = kp._valida_copione(inglese)
+    assert not ok and "italiano" in motivo
+
+
+def test_valida_copione_rifiuta_troppo_corto():
+    ok, motivo = kp._valida_copione("KANRI Tape, buon ascolto.")
+    assert not ok and "corto" in motivo
+
+
+def test_prepara_copione_recupera_la_bozza_dopo_il_ragionamento():
+    grezzo = f'{RAGIONAMENTO}\n\nDraft:\n\n"{COPIONE_BUONO}"'
+    out = kp._prepara_copione(grezzo)
+    assert kp._valida_copione(out)[0]
+    assert out.startswith("KANRI Tape")
+    assert "We need to" not in out

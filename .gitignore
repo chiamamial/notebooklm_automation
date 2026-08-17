@@ -9,6 +9,7 @@ report-*.md
 brief-*.md
 kanri-audio-*.txt
 kanri-tape-*.txt
+kanri-tape-*.state.json
 # audio in root (la traccia ufficiale del podcast vive in assets/)
 /*.mp3
 /*.wav

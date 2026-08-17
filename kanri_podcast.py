@@ -22,6 +22,7 @@ Variabili d'ambiente:
   RESEND_API_KEY / MAIL_*         email di notifica
 """
 
+import json
 import os
 import re
 import shutil
@@ -44,6 +45,18 @@ MAX_CHARS_DEFAULT = 2400
 SYSTEM = (Path(__file__).parent / "podcast_instructions.txt").read_text(encoding="utf-8")
 
 
+def _stato_carica(percorso):
+    """Stato di avanzamento della puntata di giornata (upload/Notion/fine)."""
+    try:
+        return json.loads(percorso.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _stato_salva(percorso, stato):
+    percorso.write_text(json.dumps(stato, ensure_ascii=False), encoding="utf-8")
+
+
 def taglia_a_caratteri(testo, max_chars):
     """Tronca il copione al limite, ma su un confine di frase (niente tagli a metà)."""
     if len(testo) <= max_chars:
@@ -53,6 +66,70 @@ def taglia_a_caratteri(testo, max_chars):
     if m:
         tagliato = tagliato[: m[-1].end()]
     return tagliato.strip()
+
+
+# Marcatori del "pensare ad alta voce": alcuni modelli (es. nemotron) scrivono
+# la catena di ragionamento DENTRO il contenuto invece di tenerla separata. Se
+# finisce nel copione, la sintesi vocale legge il prompt: e' successo il 3 e il
+# 17 agosto 2026. Vengono cercati solo in testa al testo.
+_RAGIONAMENTO = re.compile(
+    r"(?i)\b(we need to|we must|we should|we can|we have to|the user (?:wants|asks)"
+    r"|let'?s (?:craft|write|aim|start|count|draft)|i should|word count"
+    r"|must not invent|okay,|first,)"
+)
+
+# Parole funzionali italiane: servono a capire se il testo e' davvero in italiano
+# (il ragionamento dei modelli e' in inglese).
+_STOPWORD_IT = {
+    "il", "lo", "la", "i", "gli", "le", "di", "del", "della", "dei", "delle", "che", "per",
+    "con", "una", "un", "uno", "nel", "nella", "sono", "è", "e", "da", "si", "non", "questa",
+    "questo", "settimana", "anche", "come", "più", "tra", "sua", "suo", "ha", "in", "al", "alla",
+}  # fmt: skip
+
+
+def _sembra_italiano(testo, soglia=0.12):
+    """True se la quota di parole funzionali italiane e' plausibile."""
+    parole = re.findall(r"[a-zàèéìòóùü']+", testo.lower())
+    if len(parole) < 30:
+        return False
+    return sum(1 for p in parole if p in _STOPWORD_IT) / len(parole) >= soglia
+
+
+def _valida_copione(testo):
+    """(ok, motivo): il testo e' un copione pronto per la sintesi vocale?
+    Ultimo cancello prima del TTS: quello che passa qui viene LETTO AD ALTA VOCE."""
+    # prima il ragionamento: e' il difetto piu' specifico da diagnosticare
+    if _RAGIONAMENTO.search(testo[:600]):
+        return False, "contiene il ragionamento del modello, non il copione"
+    parole = len(testo.split())
+    if parole < 60:
+        return False, f"troppo corto ({parole} parole)"
+    if not _sembra_italiano(testo):
+        return False, "non sembra italiano"
+    return True, ""
+
+
+def _dopo_marcatore_bozza(grezzo):
+    """I modelli che ragionano in chiaro spesso chiudono con un marcatore tipo
+    'Draft:' seguito dal copione vero: tiene solo cio' che viene dopo l'ultimo."""
+    marcatori = list(
+        re.finditer(
+            r"(?i)\b(?:draft|bozza|copione(?:\s+finale)?|final(?:\s+script)?)\s*[:\n]", grezzo
+        )
+    )
+    if not marcatori:
+        return ""
+    return grezzo[marcatori[-1].end() :].strip().strip("\"“”'").strip()
+
+
+def _prepara_copione(grezzo):
+    """Dal testo grezzo del modello al copione pronto. Se il modello ha 'pensato
+    ad alta voce', prova a recuperare la sola bozza finale."""
+    testo = _pulisci_copione(grezzo)
+    if _valida_copione(testo)[0]:
+        return testo
+    estratto = _pulisci_copione(_dopo_marcatore_bozza(grezzo))
+    return estratto if _valida_copione(estratto)[0] else testo
 
 
 def genera_audio(copione, out_mp3):
@@ -146,31 +223,50 @@ def main():
     if not (nt and ndb):
         raise SystemExit("NOTION_TOKEN/NOTION_DB_ID non impostate")
 
+    # stato della giornata: rende il rilancio idempotente (non ripubblica, non
+    # duplica la riga Notion) e quindi i ritenti sono gratis.
+    stato_file = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.state.json")
+    stato = _stato_carica(stato_file)
+    if stato.get("done"):
+        print(f"Puntata del {oggi.isoformat()} già pubblicata: niente da fare", flush=True)
+        raise SystemExit(0)
+
     articoli = notion_sync.articoli_pubblicati(nt, ndb, days=days)
     print(f"Notion: {len(articoli)} articoli pubblicati negli ultimi {days} giorni", flush=True)
     if not articoli:
-        raise SystemExit("nessun articolo pubblicato questa settimana: niente puntata")
+        print("nessun articolo pubblicato questa settimana: niente puntata", flush=True)
+        raise SystemExit(0)
 
     # 1. copione — i file di giornata fanno da checkpoint: se un tentativo
     # precedente e' arrivato fin qui, si riusa il risultato invece di
     # riconsumare quota LLM/TTS (es. quando fallisce solo l'upload).
     txt = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.txt")
+    mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.mp3")
+    voce_mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.voce.mp3")
+    copione = ""
     if txt.exists() and txt.stat().st_size > 0:
-        copione = txt.read_text(encoding="utf-8").strip()
-        print(f"Copione: riuso il checkpoint del tentativo precedente ({txt})", flush=True)
-    else:
+        salvato = txt.read_text(encoding="utf-8").strip()
+        ok, motivo = _valida_copione(salvato)
+        if ok:
+            copione = salvato
+            print(f"Copione: riuso il checkpoint del tentativo precedente ({txt})", flush=True)
+        else:
+            print(f"Copione: checkpoint scartato ({motivo}), lo rigenero", flush=True)
+    if not copione:
         # thinking=False: i modelli Gemini 2.5 altrimenti consumano il budget di
         # output ragionando e troncano il copione.
-        copione = ke.article_llm(
+        grezzo = ke.article_llm(
             SYSTEM,
             costruisci_prompt(articoli, settimana),
             max_tokens=2000,
             temperature=0.6,
             thinking=False,
-        ).strip()
-        copione = _pulisci_copione(copione)
-        if len(copione.split()) < 60:
-            raise RuntimeError(f"copione troppo corto ({len(copione.split())} parole)")
+            valida=lambda t: _valida_copione(_prepara_copione(t))[0],
+        )
+        copione = _prepara_copione(grezzo)
+        ok, motivo = _valida_copione(copione)
+        if not ok:
+            raise RuntimeError(f"copione inutilizzabile: {motivo}")
         # tetto caratteri: protegge la quota mensile di ElevenLabs free
         max_chars = int(os.environ.get("PODCAST_MAX_CHARS", MAX_CHARS_DEFAULT))
         prima = len(copione)
@@ -181,6 +277,11 @@ def main():
                 flush=True,
             )
         txt.write_text(copione, encoding="utf-8")
+        # il copione e' nuovo: l'audio di un tentativo precedente e' obsoleto
+        for vecchio in (voce_mp3, mp3):
+            if vecchio.exists():
+                vecchio.unlink()
+                print(f"  (rimosso audio obsoleto: {vecchio})", flush=True)
     durata = stima_durata(copione)
     print(
         f"LLM: copione di {len(copione.split())} parole / {len(copione)} caratteri (~{durata})",
@@ -188,8 +289,6 @@ def main():
     )
 
     # 2. audio (voce)
-    mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.mp3")
-    voce_mp3 = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.voce.mp3")
     if voce_mp3.exists() and voce_mp3.stat().st_size > 0:
         print(f"TTS: riuso la voce del tentativo precedente ({voce_mp3})", flush=True)
     else:
@@ -223,8 +322,12 @@ def main():
         f"{PODCAST_NOME}, il punto settimanale di {config.BRAND}, "
         f"{config.DESCRIZIONE}. Gli articoli pubblicati nella settimana {settimana}."
     )
-    audio_url = ""
-    if os.environ.get("ARCHIVE_ACCESS_KEY"):
+    audio_url = stato.get("audio_url", "")
+    if audio_url:
+        print(
+            f"Internet Archive: riuso l'upload del tentativo precedente ({audio_url})", flush=True
+        )
+    elif os.environ.get("ARCHIVE_ACCESS_KEY"):
         meta = {
             "title": titolo,
             "mediatype": "audio",
@@ -236,13 +339,17 @@ def main():
             "description": descrizione,
         }
         audio_url = ke.archive_upload(identifier, str(mp3), meta)
+        stato["audio_url"] = audio_url
+        _stato_salva(stato_file, stato)
         print(f"Internet Archive: {audio_url}", flush=True)
     else:
         print("  (ARCHIVE_ACCESS_KEY non impostata: salto l'upload)", flush=True)
 
     # 4. metadati su Notion (DB Podcast)
     pdb = os.environ.get("PODCAST_DB_ID")
-    if pdb and audio_url:
+    if stato.get("notion_ok"):
+        print("Notion: riga già creata in un tentativo precedente", flush=True)
+    elif pdb and audio_url:
         ep = {
             "titolo": titolo,
             "data": oggi.isoformat(),
@@ -253,6 +360,8 @@ def main():
             "articoli": [{"title": a["title"], "slug": a.get("slug", "")} for a in articoli],
         }
         notion_sync.crea_episodio(nt, pdb, ep)
+        stato["notion_ok"] = True
+        _stato_salva(stato_file, stato)
         print("Notion: puntata salvata nel database Podcast", flush=True)
     elif not pdb:
         print("  (PODCAST_DB_ID non impostata: salto il salvataggio su Notion)", flush=True)
@@ -264,6 +373,8 @@ def main():
         f"Audio: {audio_url or '(upload saltato)'}\n\n---\n\n{copione}"
     )
     send_email(f"🎙️ {PODCAST_NOME} — {settimana}", corpo_mail, str(txt))
+    stato["done"] = True
+    _stato_salva(stato_file, stato)
 
 
 def _pulisci_copione(testo):
@@ -292,9 +403,14 @@ if __name__ == "__main__":
                 print("Podcast fallito, riprovo tra 300s...", flush=True)
                 time.sleep(300)
                 continue
+            if os.environ.get("PODCAST_QUIET") == "1":
+                # ritenti automatici del pomeriggio: falliscono in silenzio,
+                # l'avviso e' gia' partito col run principale
+                raise
             ke.alert(
                 f"⚠️ {PODCAST_NOME} FALLITO — {date.today().isoformat()}",
-                "La puntata podcast settimanale non è stata generata dopo 2 tentativi.\n\n"
-                + traceback.format_exc(),
+                "La puntata podcast settimanale non è stata generata dopo 2 tentativi.\n"
+                "L'audio potrebbe essere già pronto sul server: i ritenti automatici "
+                "del pomeriggio riprovano solo la pubblicazione.\n\n" + traceback.format_exc(),
             )
             raise

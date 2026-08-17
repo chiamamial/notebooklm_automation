@@ -1,0 +1,13 @@
+[Unit]
+Description=Ritenta nel pomeriggio del lunedì la pubblicazione della puntata KANRI
+
+[Timer]
+# La coda di archive.org può restare satura per ore: se il run delle 12:00 non
+# ce l'ha fatta, si riprova. Grazie allo stato di giornata questi run costano
+# nulla quando la puntata è già pubblicata (escono subito).
+OnCalendar=Mon *-*-* 14,16,18,20,22:00:00
+# niente recuperi al riavvio: i ritenti hanno senso solo nel giorno stesso
+Persistent=false
+
+[Install]
+WantedBy=timers.target
