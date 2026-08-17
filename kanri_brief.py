@@ -24,10 +24,16 @@ SYSTEM = (
     "coerenti con le verticali editoriali. Rispondi sempre e solo in italiano."
 )
 
-# Domini dei feed musicali: la passata "musica" pesca SOLO da questi (config).
+# Domini per le passate a quota garantita: ogni passata pesca SOLO dai suoi feed
+# (config), così arte e musica non devono competere con design e grafica.
+ARTE_DOMINI = set(config.get("brief.arte_domini", []))
+CATEGORIA_ARTE = config.get("brief.categoria_arte", "Arte e Fotografia")
 MUSICA_DOMINI = set(config.get("brief.musica_domini", []))
 CATEGORIA_MUSICA = config.get("brief.categoria_musica", "Musica Elettronica")
 _PRIORITA = config.get("priorita", [])
+_ESCLUSE = [
+    f"'{c}'" for c, d in ((CATEGORIA_ARTE, ARTE_DOMINI), (CATEGORIA_MUSICA, MUSICA_DOMINI)) if d
+]
 
 FOCUS_GENERALE = (
     f"Seleziona le notizie PIÙ interessanti per {config.BRAND} (scarta gossip, "
@@ -38,10 +44,20 @@ FOCUS_GENERALE = (
         else ""
     )
     + (
-        f"NON selezionare notizie di '{CATEGORIA_MUSICA}': sono gestite in una passata separata."
-        if MUSICA_DOMINI
+        f"NON selezionare notizie di {' o '.join(_ESCLUSE)}: sono gestite in passate separate."
+        if _ESCLUSE
         else ""
     )
+)
+
+FOCUS_ARTE = (
+    "Queste news vengono da testate di arte contemporanea. Seleziona SOLO le più "
+    "forti e attinenti all'ARTE: artisti e loro lavori (pittura, scultura, "
+    "disegno, installazione), mostre e retrospettive, biennali e fiere (Art "
+    "Basel, Frieze, TEFAF), musei e collezioni, mercato dell'arte e aste, "
+    "riscoperte e archivi d'artista. Scarta ciò che è puro design di prodotto o "
+    "grafica commerciale, il gossip sui collezionisti e le note di mercato senza "
+    f"un'opera al centro. Per 'categoria' usa sempre '{CATEGORIA_ARTE}'."
 )
 
 FOCUS_MUSICA = (
@@ -134,6 +150,7 @@ def main():
     today = date.today().isoformat()
     feeds = Path(__file__).parent / "kanri_feeds.txt"
     totale = int(os.environ.get("BRIEF_TOTALE", str(config.get("brief.totale", 7))))
+    arte_target = int(os.environ.get("BRIEF_ARTE", str(config.get("brief.arte", 3))))
     musica_target = int(os.environ.get("BRIEF_MUSICA", str(config.get("brief.musica", 2))))
 
     # cap basso per feed (no monopolio di chi pubblica tantissimo, es. Dezeen)
@@ -160,22 +177,33 @@ def main():
     # mescola: l'ordine dei feed non deve influenzare la scelta dell'LLM
     random.shuffle(items)
 
-    # split del pool: musica elettronica vs tutto il resto
+    # split del pool: arte / musica elettronica / tutto il resto
+    riservati = ARTE_DOMINI | MUSICA_DOMINI
+    arte = [it for it in items if it.get("source") in ARTE_DOMINI]
     musica = [it for it in items if it.get("source") in MUSICA_DOMINI]
-    altri = [it for it in items if it.get("source") not in MUSICA_DOMINI]
-    print(f"  pool: {len(musica)} musica elettronica / {len(altri)} altri", flush=True)
+    altri = [it for it in items if it.get("source") not in riservati]
+    print(
+        f"  pool: {len(arte)} arte / {len(musica)} musica elettronica / {len(altri)} altri",
+        flush=True,
+    )
 
-    # PASSATA 1 — quota garantita di musica elettronica
+    # PASSATA 1 — quota garantita di arte contemporanea (filone principale)
+    n_arte = min(arte_target, len(arte))
+    scelte_arte = seleziona(arte, n_arte, FOCUS_ARTE)
+    print(f"LLM arte: {len(scelte_arte)} news", flush=True)
+
+    # PASSATA 2 — quota garantita di musica elettronica
     n_musica = min(musica_target, len(musica))
     scelte_musica = seleziona(musica, n_musica, FOCUS_MUSICA)
     print(f"LLM musica: {len(scelte_musica)} news", flush=True)
 
-    # PASSATA 2 — il resto (design/foto/storia), per arrivare a `totale`
-    scelte_altri = seleziona(altri, totale - n_musica, FOCUS_GENERALE)
+    # PASSATA 3 — il resto (design/grafica/storia), per arrivare a `totale`
+    scelte_altri = seleziona(altri, totale - n_arte - n_musica, FOCUS_GENERALE)
     print(f"LLM generale: {len(scelte_altri)} news", flush=True)
 
     # costruisci gli item per Notion + il corpo email
     notizie, righe_md, visti = [], [f"# Brief {config.BRAND} — " + today, ""], set()
+    aggiungi(scelte_arte, arte, notizie, righe_md, visti)
     aggiungi(scelte_musica, musica, notizie, righe_md, visti)
     aggiungi(scelte_altri, altri, notizie, righe_md, visti)
 

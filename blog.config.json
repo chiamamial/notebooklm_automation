@@ -5,16 +5,23 @@
   "categorie": [
     {"nome": "Design del Prodotto", "desc": "oggetti, mobili, lighting, ceramiche, homeware, prodotti industriali, design scultoreo/materico, collaborazioni designer×brand."},
     {"nome": "Graphic Design", "desc": "identità visive, tipografia, poster, editoria, packaging, branding, interfacce/UI, layout e grafica in genere."},
-    {"nome": "Fotografia", "desc": "fotografia, reportage, ritratto, arte visiva, installazioni, immagini ad alto impatto."},
+    {"nome": "Arte e Fotografia", "desc": "arte contemporanea e fotografia: artisti, pittura, scultura, mostre e retrospettive, biennali e fiere (Art Basel, Frieze, TEFAF), musei, mercato dell'arte, installazioni, reportage e ritratto, immagini ad alto impatto."},
     {"nome": "Musica Elettronica", "desc": "musica elettronica e sound design, techno/house, uscite, produzione, analisi del suono."},
     {"nome": "Storia del Design", "desc": "maestri storici del design e della grafica, riscoperte, archivi, metodologie e processi."}
   ],
   "priorita": ["Design del Prodotto", "Graphic Design"],
   "brief": {
     "totale": 7,
+    "arte": 3,
     "musica": 2,
     "per_feed": 4,
     "max_age_days": 7,
+    "categoria_arte": "Arte e Fotografia",
+    "arte_domini": [
+      "news.artnet.com", "artnews.com", "theartnewspaper.com", "artforum.com",
+      "contemporaryartdaily.com", "artsy.net", "elephant.art", "hyperallergic.com",
+      "thisiscolossal.com"
+    ],
     "categoria_musica": "Musica Elettronica",
     "musica_domini": [
       "attackmagazine.com", "cdm.link", "xlr8r.com", "daily.bandcamp.com",

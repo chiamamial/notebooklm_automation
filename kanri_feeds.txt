@@ -1,7 +1,22 @@
 # Feed RSS nativi per KANRI (US / JP / EU, no Italia). Uno per riga, # = commento.
+# Tutti verificati funzionanti e freschi il 17 agosto 2026.
+
+# --- Arte contemporanea / mostre / mercato dell'arte ---
+# Artnet, Artsy, ARTnews e The Art Newspaper coprono le fiere (Art Basel,
+# Frieze, TEFAF): Art Basel non pubblica un feed RSS proprio.
+https://news.artnet.com/feed
+https://www.artnews.com/feed/
+https://www.theartnewspaper.com/rss.xml
+https://www.artforum.com/feed/
+https://contemporaryartdaily.com/feed/
+https://www.artsy.net/rss/news
+https://elephant.art/feed/
+https://hyperallergic.com/feed/
+https://www.thisiscolossal.com/feed/
 
 # --- Product design / oggetti / materia ---
 https://www.dezeen.com/feed/
+https://www.designboom.com/feed/
 https://www.core77.com/feed
 https://www.yankodesign.com/feed/
 https://design-milk.com/feed/
@@ -12,12 +27,11 @@ https://www.creativeboom.com/feed/
 https://www.printmag.com/feed/
 https://www.slanted.de/feed/
 
-# --- Fotografia / visual / arte ---
+# --- Fotografia / visual ---
 https://www.ignant.com/feed/
 https://www.booooooom.com/feed/
 https://petapixel.com/feed/
-https://hyperallergic.com/feed/
-https://www.thisiscolossal.com/feed/
+https://aestheticamagazine.com/feed/
 https://trendland.com/feed/
 
 # --- Giappone ---

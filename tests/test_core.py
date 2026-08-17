@@ -16,6 +16,25 @@ def test_config_caricata():
     assert len(config.CATEGORIE_NOMI) == 5
 
 
+def test_quote_brief_coerenti_col_totale():
+    """Arte e musica hanno quota garantita: insieme non devono mangiarsi il
+    totale, altrimenti la passata generale resta senza slot."""
+    totale = config.get("brief.totale")
+    arte = config.get("brief.arte")
+    musica = config.get("brief.musica")
+    assert arte and musica and totale
+    assert arte + musica < totale, "nessuno slot per design/grafica"
+    assert config.get("brief.categoria_arte") in config.CATEGORIE_NOMI
+    assert config.get("brief.categoria_musica") in config.CATEGORIE_NOMI
+
+
+def test_domini_arte_e_musica_non_si_sovrappongono():
+    """Un feed in entrambe le liste finirebbe in due passate: doppioni."""
+    arte = set(config.get("brief.arte_domini", []))
+    musica = set(config.get("brief.musica_domini", []))
+    assert arte and not (arte & musica)
+
+
 # --- kanri_engine ---
 
 
