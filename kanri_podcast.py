@@ -57,6 +57,42 @@ def _stato_salva(percorso, stato):
     percorso.write_text(json.dumps(stato, ensure_ascii=False), encoding="utf-8")
 
 
+def _puntata_in_sospeso(entro_giorni=7):
+    """Data della puntata piu' recente iniziata ma mai pubblicata (copione su
+    disco e stato non 'done'). None se non ce n'e' nessuna."""
+    riferimento = date.today()
+    for delta in range(entro_giorni + 1):
+        giorno = (riferimento - timedelta(days=delta)).isoformat()
+        txt = Path(f"{PODCAST_SLUG}-{giorno}.txt")
+        if not (txt.exists() and txt.stat().st_size > 0):
+            continue
+        if not _stato_carica(Path(f"{PODCAST_SLUG}-{giorno}.state.json")).get("done"):
+            return date.fromisoformat(giorno)
+    return None
+
+
+def _data_puntata():
+    """Di quale puntata ci stiamo occupando.
+
+    Tutto (nomi file, titolo, identifier archive.org) deriva da questa data: un
+    ritento nei giorni successivi deve continuare la puntata di LUNEDI', non
+    inventarne una nuova con la data di oggi.
+      PODCAST_DATE=YYYY-MM-DD  forza una data (utile a mano)
+      PODCAST_RESUME=1         riprende la puntata in sospeso, e basta
+    """
+    forzata = os.environ.get("PODCAST_DATE")
+    if forzata:
+        return date.fromisoformat(forzata)
+    if os.environ.get("PODCAST_RESUME") == "1":
+        sospesa = _puntata_in_sospeso()
+        if not sospesa:
+            print("Nessuna puntata in sospeso: niente da ritentare", flush=True)
+            raise SystemExit(0)
+        print(f"Ritento la puntata in sospeso del {sospesa.isoformat()}", flush=True)
+        return sospesa
+    return date.today()
+
+
 def taglia_a_caratteri(testo, max_chars):
     """Tronca il copione al limite, ma su un confine di frase (niente tagli a metà)."""
     if len(testo) <= max_chars:
@@ -214,7 +250,7 @@ def stima_durata(testo):
 
 
 def main():
-    oggi = date.today()
+    oggi = _data_puntata()
     settimana = settimana_label(oggi)
     nt = os.environ.get("NOTION_TOKEN")
     ndb = os.environ.get("NOTION_DB_ID")
@@ -223,7 +259,7 @@ def main():
     if not (nt and ndb):
         raise SystemExit("NOTION_TOKEN/NOTION_DB_ID non impostate")
 
-    # stato della giornata: rende il rilancio idempotente (non ripubblica, non
+    # stato della puntata: rende il rilancio idempotente (non ripubblica, non
     # duplica la riga Notion) e quindi i ritenti sono gratis.
     stato_file = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.state.json")
     stato = _stato_carica(stato_file)
@@ -231,13 +267,7 @@ def main():
         print(f"Puntata del {oggi.isoformat()} già pubblicata: niente da fare", flush=True)
         raise SystemExit(0)
 
-    articoli = notion_sync.articoli_pubblicati(nt, ndb, days=days)
-    print(f"Notion: {len(articoli)} articoli pubblicati negli ultimi {days} giorni", flush=True)
-    if not articoli:
-        print("nessun articolo pubblicato questa settimana: niente puntata", flush=True)
-        raise SystemExit(0)
-
-    # 1. copione — i file di giornata fanno da checkpoint: se un tentativo
+    # 1. copione — i file della puntata fanno da checkpoint: se un tentativo
     # precedente e' arrivato fin qui, si riusa il risultato invece di
     # riconsumare quota LLM/TTS (es. quando fallisce solo l'upload).
     txt = Path(f"{PODCAST_SLUG}-{oggi.isoformat()}.txt")
@@ -252,6 +282,16 @@ def main():
             print(f"Copione: riuso il checkpoint del tentativo precedente ({txt})", flush=True)
         else:
             print(f"Copione: checkpoint scartato ({motivo}), lo rigenero", flush=True)
+
+    articoli = notion_sync.articoli_pubblicati(nt, ndb, days=days)
+    print(f"Notion: {len(articoli)} articoli pubblicati negli ultimi {days} giorni", flush=True)
+    # senza articoli non c'e' nulla da raccontare, ma se il copione e' gia'
+    # scritto si va avanti: un ritento nei giorni dopo deve poter pubblicare
+    # (la finestra di Notion e' scivolata, la puntata invece e' quella di lunedi').
+    if not articoli and not copione:
+        print("nessun articolo pubblicato questa settimana: niente puntata", flush=True)
+        raise SystemExit(0)
+
     if not copione:
         # thinking=False: i modelli Gemini 2.5 altrimenti consumano il budget di
         # output ragionando e troncano il copione.

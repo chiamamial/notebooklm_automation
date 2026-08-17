@@ -1,5 +1,7 @@
 """Test delle funzioni pure (nessuna rete, nessuna chiave)."""
 
+import pytest
+
 import config
 import kanri_engine as ke
 import kanri_podcast as kp
@@ -128,6 +130,44 @@ def test_valida_copione_rifiuta_inglese_senza_marcatori():
 def test_valida_copione_rifiuta_troppo_corto():
     ok, motivo = kp._valida_copione("KANRI Tape, buon ascolto.")
     assert not ok and "corto" in motivo
+
+
+def test_puntata_in_sospeso_trova_quella_non_pubblicata(tmp_path, monkeypatch):
+    import datetime
+
+    monkeypatch.chdir(tmp_path)
+    ieri = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    (tmp_path / f"{kp.PODCAST_SLUG}-{ieri}.txt").write_text(COPIONE_BUONO, encoding="utf-8")
+    assert kp._puntata_in_sospeso() == datetime.date.fromisoformat(ieri)
+
+
+def test_puntata_in_sospeso_ignora_quella_gia_pubblicata(tmp_path, monkeypatch):
+    import datetime
+
+    monkeypatch.chdir(tmp_path)
+    ieri = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    (tmp_path / f"{kp.PODCAST_SLUG}-{ieri}.txt").write_text(COPIONE_BUONO, encoding="utf-8")
+    (tmp_path / f"{kp.PODCAST_SLUG}-{ieri}.state.json").write_text(
+        '{"done": true}', encoding="utf-8"
+    )
+    assert kp._puntata_in_sospeso() is None
+
+
+def test_data_puntata_in_ripresa_non_inventa_una_puntata_nuova(tmp_path, monkeypatch):
+    """Il bug da evitare: un ritento il martedì che genera una puntata di martedì
+    invece di pubblicare quella di lunedì rimasta in sospeso."""
+    import datetime
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PODCAST_RESUME", "1")
+    monkeypatch.delenv("PODCAST_DATE", raising=False)
+    ieri = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    (tmp_path / f"{kp.PODCAST_SLUG}-{ieri}.txt").write_text(COPIONE_BUONO, encoding="utf-8")
+    assert kp._data_puntata() == datetime.date.fromisoformat(ieri)
+    # senza nulla in sospeso il ritento esce senza fare danni
+    (tmp_path / f"{kp.PODCAST_SLUG}-{ieri}.txt").unlink()
+    with pytest.raises(SystemExit):
+        kp._data_puntata()
 
 
 def test_prepara_copione_recupera_la_bozza_dopo_il_ragionamento():

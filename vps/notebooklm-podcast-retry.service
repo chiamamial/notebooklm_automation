@@ -10,4 +10,7 @@ EnvironmentFile=/opt/notebooklm/notebooklm.env
 Environment=PATH=/opt/notebooklm/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # ritento silenzioso: l'avviso email è già partito col run principale
 Environment=PODCAST_QUIET=1
+# riprende SOLO una puntata in sospeso: non ne crea mai una nuova, così i
+# ritenti dei giorni dopo pubblicano quella di lunedì invece di inventarne altre
+Environment=PODCAST_RESUME=1
 ExecStart=/opt/notebooklm/.venv/bin/python /opt/notebooklm/kanri_podcast.py
