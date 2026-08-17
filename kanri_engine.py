@@ -16,6 +16,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -603,12 +604,41 @@ def tts_google(
 # ---------- Internet Archive (hosting audio gratuito con API) ----------
 
 
+def archive_limite_attivo(identifier, access_key=None):
+    """(bloccato, motivo) dallo stato S3 di archive.org, SENZA tentare l'upload:
+    l'endpoint check_limit e' gratuito e dice se la coda e' satura e di chi e' la
+    colpa (nostra o globale). Se non risponde ritorna (False, "") per non
+    bloccare mai un upload che potrebbe funzionare."""
+    key = access_key or os.environ.get("ARCHIVE_ACCESS_KEY")
+    if not key:
+        return False, ""
+    url = (
+        f"https://s3.us.archive.org/?check_limit=1&accesskey={key}"
+        f"&bucket={urllib.parse.quote(identifier)}"
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.load(r)
+    except Exception:
+        return False, ""
+    if not d.get("over_limit"):
+        return False, ""
+    det = d.get("detail", {}) or {}
+    nostri = det.get("accesskey_tasks_queued", 0) or det.get("bucket_tasks_queued", 0)
+    motivo = det.get("limit_reason", "limite attivo")
+    coda = f"{det.get('total_tasks_queued', '?')}/{det.get('total_global_limit', '?')}"
+    origine = "nostra coda" if nostri else "coda globale archive.org"
+    return True, f"{motivo} ({origine}, {coda})"
+
+
 def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=None, retries=4):
     """Carica un file su archive.org e restituisce l'URL pubblico diretto.
     Le chiavi S3 si generano (gratis) su https://archive.org/account/s3.php
     e vanno in ARCHIVE_ACCESS_KEY / ARCHIVE_SECRET_KEY.
     La coda di archive.org a volte e' satura ("total_tasks_queued exceeds
-    global_limit") per decine di minuti: backoff esponenziale, non 20s fissi."""
+    global_limit") per ore: backoff esponenziale e, prima di ogni tentativo, una
+    interrogazione gratuita dello stato per non spedire un upload gia' condannato."""
     import internetarchive as ia
 
     access_key = access_key or os.environ["ARCHIVE_ACCESS_KEY"]
@@ -616,6 +646,18 @@ def archive_upload(identifier, filepath, metadata, access_key=None, secret_key=N
     fname = os.path.basename(filepath)
     last = ""
     for attempt in range(retries + 1):
+        bloccato, motivo = archive_limite_attivo(identifier, access_key)
+        if bloccato:
+            last = motivo
+            if attempt < retries:
+                wait = 60 * (2**attempt)
+                print(
+                    f"  (archive.org non accetta upload: {motivo} — riprovo tra {wait}s)",
+                    flush=True,
+                )
+                time.sleep(wait)
+                continue
+            break
         try:
             resp = ia.upload(
                 identifier,
