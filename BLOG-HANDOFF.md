@@ -109,12 +109,14 @@ estratto da `Di cosa parla`).
 ## 7. Stack e deploy consigliati
 
 - **Next.js (App Router)** su **Vercel**.
-- Fetch da Notion **a build time** (SSG) con `@notionhq/client`. Opzionale ISR:
-  `export const revalidate = 3600`.
-- **Pubblicazione istantanea**: creare un **Deploy Hook** su Vercel
-  (Project → Settings → Git → Deploy Hooks). Chiamando quell'URL (POST) il sito
-  si ri-genera. Si può collegare a un pulsante/automazione Notion quando si
-  spunta `Pubblica`.
+- Fetch da Notion con `@notionhq/client`. **Com'è configurato oggi**: ISR con
+  rigenerazione ogni 300 secondi (l'header `x-nextjs-stale-time: 300` sul sito
+  live lo conferma). Quindi spuntare `Pubblica` in Notion basta: l'articolo
+  compare da solo entro ~5 minuti, senza deploy manuali.
+- **Pubblicazione istantanea** (non necessaria, l'ISR copre già il caso): si può
+  creare un **Deploy Hook** su Vercel (Project → Settings → Git → Deploy Hooks)
+  e chiamarlo in POST per rigenerare subito. `kanri_autopilot.py` lo usa se la
+  variabile `VERCEL_DEPLOY_HOOK` è impostata, altrimenti lo salta.
 - Variabili d'ambiente su Vercel: `NOTION_TOKEN`, `NOTION_DATABASE_ID`.
 
 ## 8. Note
