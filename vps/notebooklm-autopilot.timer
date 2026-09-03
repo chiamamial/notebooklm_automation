@@ -1,0 +1,11 @@
+[Unit]
+Description=Lancia l'autopilot KANRI ogni sera alle 21:00
+
+[Timer]
+# Ora locale del VPS (Europe/Rome): 21:00 italiane, come richiesto.
+# Se il brief del giorno è stato lavorato l'autopilot esce subito senza fare nulla.
+OnCalendar=*-*-* 21:00:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

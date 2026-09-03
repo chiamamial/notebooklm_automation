@@ -30,6 +30,30 @@ SYSTEM = (
 )
 
 
+# Lunghezza minima accettabile: le istruzioni chiedono 600-1000 parole, sotto le
+# 300 vuol dire risposta troncata o modello che non ha seguito il formato.
+MIN_PAROLE = 300
+
+
+def valida_articolo(md):
+    """(ok, motivo): l'articolo e' pubblicabile?
+
+    Serve soprattutto quando NON c'e' una revisione umana (autopilot): senza
+    questo controllo un modello che 'ragiona ad alta voce' finirebbe in chiaro
+    sul sito, come successe al podcast il 3 e il 17 agosto 2026.
+    """
+    if not md or not md.strip():
+        return False, "risposta vuota"
+    if ke.contiene_ragionamento(md):
+        return False, "contiene il ragionamento del modello, non l'articolo"
+    parole = len(md.split())
+    if parole < MIN_PAROLE:
+        return False, f"troppo corto ({parole} parole, minimo {MIN_PAROLE})"
+    if not ke.sembra_italiano(md):
+        return False, "non sembra italiano"
+    return True, ""
+
+
 def _titolo_da_md(md):
     for line in md.splitlines():
         s = line.strip()
@@ -217,7 +241,12 @@ def genera_articolo(titolo, contesto="", fonte_url="", categoria="", exclude_id=
         f"PERTINENTI (non copiarle), con angolo editoriale {config.BRAND}. Cita i fatti e, "
         f"nella sezione NOTE FONTI, elenca SOLO le fonti realmente usate (titolo + link)."
     )
-    out = ke.article_llm(SYSTEM, user, max_tokens=8000, temperature=0.6)
+    out = ke.article_llm(
+        SYSTEM, user, max_tokens=8000, temperature=0.6, valida=lambda t: valida_articolo(t)[0]
+    )
+    ok, motivo = valida_articolo(out)
+    if not ok:
+        raise RuntimeError(f"articolo inutilizzabile: {motivo}")
     body = ke.pulisci(out)
     slug = estrai_slug(body) or _slugify(titolo)
     return body, cover, slug

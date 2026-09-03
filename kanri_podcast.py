@@ -104,43 +104,16 @@ def taglia_a_caratteri(testo, max_chars):
     return tagliato.strip()
 
 
-# Marcatori del "pensare ad alta voce": alcuni modelli (es. nemotron) scrivono
-# la catena di ragionamento DENTRO il contenuto invece di tenerla separata. Se
-# finisce nel copione, la sintesi vocale legge il prompt: e' successo il 3 e il
-# 17 agosto 2026. Vengono cercati solo in testa al testo.
-_RAGIONAMENTO = re.compile(
-    r"(?i)\b(we need to|we must|we should|we can|we have to|the user (?:wants|asks)"
-    r"|let'?s (?:craft|write|aim|start|count|draft)|i should|word count"
-    r"|must not invent|okay,|first,)"
-)
-
-# Parole funzionali italiane: servono a capire se il testo e' davvero in italiano
-# (il ragionamento dei modelli e' in inglese).
-_STOPWORD_IT = {
-    "il", "lo", "la", "i", "gli", "le", "di", "del", "della", "dei", "delle", "che", "per",
-    "con", "una", "un", "uno", "nel", "nella", "sono", "è", "e", "da", "si", "non", "questa",
-    "questo", "settimana", "anche", "come", "più", "tra", "sua", "suo", "ha", "in", "al", "alla",
-}  # fmt: skip
-
-
-def _sembra_italiano(testo, soglia=0.12):
-    """True se la quota di parole funzionali italiane e' plausibile."""
-    parole = re.findall(r"[a-zàèéìòóùü']+", testo.lower())
-    if len(parole) < 30:
-        return False
-    return sum(1 for p in parole if p in _STOPWORD_IT) / len(parole) >= soglia
-
-
 def _valida_copione(testo):
     """(ok, motivo): il testo e' un copione pronto per la sintesi vocale?
     Ultimo cancello prima del TTS: quello che passa qui viene LETTO AD ALTA VOCE."""
     # prima il ragionamento: e' il difetto piu' specifico da diagnosticare
-    if _RAGIONAMENTO.search(testo[:600]):
+    if ke.contiene_ragionamento(testo):
         return False, "contiene il ragionamento del modello, non il copione"
     parole = len(testo.split())
     if parole < 60:
         return False, f"troppo corto ({parole} parole)"
-    if not _sembra_italiano(testo):
+    if not ke.sembra_italiano(testo):
         return False, "non sembra italiano"
     return True, ""
 

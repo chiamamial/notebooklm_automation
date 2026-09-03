@@ -37,6 +37,40 @@ def _post(url, payload, headers, timeout=120):
         return json.load(r)
 
 
+# ---------- Qualita' del testo generato ----------
+
+# Alcuni modelli (es. nemotron) scrivono la catena di ragionamento DENTRO il
+# contenuto invece di tenerla separata. Senza un controllo finisce nel prodotto
+# finale: e' successo al podcast il 3 e il 17 agosto 2026, con la sintesi vocale
+# che leggeva il prompt. Condiviso da podcast e articoli.
+RAGIONAMENTO_RE = re.compile(
+    r"(?i)\b(we need to|we must|we should|we can|we have to|the user (?:wants|asks)"
+    r"|let'?s (?:craft|write|aim|start|count|draft)|i should|word count"
+    r"|must not invent|okay,|first,)"
+)
+
+# Parole funzionali italiane: dicono se il testo e' davvero in italiano
+# (il ragionamento dei modelli e' in inglese).
+STOPWORD_IT = {
+    "il", "lo", "la", "i", "gli", "le", "di", "del", "della", "dei", "delle", "che", "per",
+    "con", "una", "un", "uno", "nel", "nella", "sono", "è", "e", "da", "si", "non", "questa",
+    "questo", "settimana", "anche", "come", "più", "tra", "sua", "suo", "ha", "in", "al", "alla",
+}  # fmt: skip
+
+
+def contiene_ragionamento(testo, testa=600):
+    """True se in testa al testo c'e' il 'pensare ad alta voce' del modello."""
+    return bool(RAGIONAMENTO_RE.search(testo[:testa]))
+
+
+def sembra_italiano(testo, soglia=0.12, minimo_parole=30):
+    """True se la quota di parole funzionali italiane e' plausibile."""
+    parole = re.findall(r"[a-zàèéìòóùü']+", testo.lower())
+    if len(parole) < minimo_parole:
+        return False
+    return sum(1 for p in parole if p in STOPWORD_IT) / len(parole) >= soglia
+
+
 # ---------- OpenRouter ----------
 
 # Modelli free di riserva (provati in ordine se quello primario fallisce).

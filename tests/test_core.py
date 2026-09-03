@@ -3,6 +3,7 @@
 import pytest
 
 import config
+import kanri_autopilot as ap
 import kanri_engine as ke
 import kanri_podcast as kp
 import notion_sync as ns
@@ -195,3 +196,36 @@ def test_prepara_copione_recupera_la_bozza_dopo_il_ragionamento():
     assert kp._valida_copione(out)[0]
     assert out.startswith("KANRI Tape")
     assert "We need to" not in out
+
+
+# --- autopilot serale: il cancello che decide se pubblicare senza revisione ---
+
+
+def _riga(**kw):
+    base = {"stato": "Da fare", "scrivi": False, "pubblica": False, "title": "x"}
+    base.update(kw)
+    return base
+
+
+def test_autopilot_brief_intatto_puo_pubblicare():
+    righe = [_riga(), _riga(), _riga()]
+    assert ap.righe_lavorate(righe) == []
+
+
+def test_autopilot_si_ferma_se_una_riga_e_spuntata():
+    righe = [_riga(), _riga(scrivi=True)]
+    assert len(ap.righe_lavorate(righe)) == 1
+
+
+def test_autopilot_si_ferma_se_un_articolo_e_gia_scritto():
+    for stato in ("In corso", "Fatto"):
+        assert len(ap.righe_lavorate([_riga(), _riga(stato=stato)])) == 1
+
+
+def test_autopilot_si_ferma_se_qualcosa_e_gia_online():
+    assert len(ap.righe_lavorate([_riga(pubblica=True)])) == 1
+
+
+def test_autopilot_stato_mancante_vale_come_da_fare():
+    """Una riga senza Stato non deve bloccare l'autopilot."""
+    assert ap.righe_lavorate([{"scrivi": False, "pubblica": False, "stato": ""}]) == []

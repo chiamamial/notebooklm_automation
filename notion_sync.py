@@ -449,3 +449,57 @@ def append_markdown(token, page_id, md):
     # Notion: max 100 blocchi per richiesta
     for i in range(0, len(blocks), 90):
         _req("PATCH", f"/blocks/{page_id}/children", token, {"children": blocks[i : i + 90]})
+
+
+def righe_del_giorno(token, db_id, giorno):
+    """Righe del brief di `giorno` con lo stato delle azioni umane (stato,
+    'Scrivi articolo', 'Pubblica'). Serve all'autopilot per capire se il brief
+    e' stato lavorato o e' rimasto intatto."""
+    res = _req(
+        "POST",
+        f"/databases/{db_id}/query",
+        token,
+        {"filter": {"property": "Data", "date": {"equals": giorno}}, "page_size": 100},
+    )
+    out = []
+    for p in res.get("results", []):
+        props = p["properties"]
+        fonte = "".join(
+            t.get("plain_text", "") for t in props.get("Fonte", {}).get("rich_text", [])
+        )
+        m = re.search(r"https?://\S+", fonte)
+        cat = props.get("Categoria", {}).get("select")
+        stato = props.get("Stato", {}).get("select")
+        out.append(
+            {
+                "page_id": p["id"],
+                "title": "".join(t.get("plain_text", "") for t in props["Notizia"]["title"]),
+                "summary": "".join(
+                    t.get("plain_text", "")
+                    for t in props.get("Di cosa parla", {}).get("rich_text", [])
+                ),
+                "categoria": cat["name"] if cat else "",
+                "fonte": fonte,
+                "fonte_url": m.group(0).rstrip(").,") if m else "",
+                "stato": stato["name"] if stato else "",
+                "scrivi": bool(props.get("Scrivi articolo", {}).get("checkbox")),
+                "pubblica": bool(props.get("Pubblica", {}).get("checkbox")),
+            }
+        )
+    return out
+
+
+def pubblica(token, page_id, giorno):
+    """Mette l'articolo online: `Pubblica` spuntato + `Data pubblicazione`.
+    Il sito mostra solo le righe con Pubblica = true."""
+    _req(
+        "PATCH",
+        f"/pages/{page_id}",
+        token,
+        {
+            "properties": {
+                "Pubblica": {"checkbox": True},
+                "Data pubblicazione": {"date": {"start": giorno}},
+            }
+        },
+    )

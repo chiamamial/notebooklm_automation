@@ -1,0 +1,11 @@
+[Unit]
+Description=Autopilot KANRI: se il brief non è stato lavorato, scrive e pubblica la news più promettente
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/notebooklm
+EnvironmentFile=/opt/notebooklm/notebooklm.env
+Environment=PATH=/opt/notebooklm/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/notebooklm/.venv/bin/python /opt/notebooklm/kanri_autopilot.py
