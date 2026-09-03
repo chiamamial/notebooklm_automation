@@ -77,23 +77,33 @@ Ordina TUTTE le news dalla più promettente alla meno promettente. Per ognuna:
 Rispondi SOLO con un array JSON, niente altro."""
 
 
-def scegli(candidati):
-    """(indice, classifica) della news più promettente, scelta dall'LLM."""
-    classifica = ke.llm_json(
-        [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": costruisci_prompt(candidati)},
-        ],
-        max_tokens=2000,
-        temperature=0.3,
-    )
-    for voce in classifica if isinstance(classifica, list) else []:
-        if not isinstance(voce, dict):
-            continue
-        idx = voce.get("idx")
-        if isinstance(idx, int) and 0 <= idx < len(candidati):
-            return idx, classifica
-    raise RuntimeError(f"l'LLM non ha indicato una news valida: {str(classifica)[:200]}")
+def scegli(candidati, tentativi=3):
+    """(indice, classifica) della news più promettente, scelta dall'LLM.
+
+    A volte il modello risponde con un JSON valido ma senza un indice
+    utilizzabile: si riprova invece di rinunciare alla serata. Se proprio non
+    arriva una scelta valida si solleva l'errore, così l'autopilot NON pubblica
+    nulla a caso.
+    """
+    ultimo = ""
+    for tentativo in range(tentativi):
+        classifica = ke.llm_json(
+            [
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": costruisci_prompt(candidati)},
+            ],
+            max_tokens=2000,
+            temperature=0.3,
+        )
+        for voce in classifica if isinstance(classifica, list) else []:
+            if not isinstance(voce, dict):
+                continue
+            idx = voce.get("idx")
+            if isinstance(idx, int) and 0 <= idx < len(candidati):
+                return idx, classifica
+        ultimo = str(classifica)[:200]
+        print(f"  (risposta senza indice valido, ritento {tentativo + 1}/{tentativi})", flush=True)
+    raise RuntimeError(f"l'LLM non ha indicato una news valida: {ultimo}")
 
 
 def _risveglia_sito():
