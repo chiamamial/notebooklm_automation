@@ -229,3 +229,39 @@ def test_autopilot_si_ferma_se_qualcosa_e_gia_online():
 def test_autopilot_stato_mancante_vale_come_da_fare():
     """Una riga senza Stato non deve bloccare l'autopilot."""
     assert ap.righe_lavorate([{"scrivi": False, "pubblica": False, "stato": ""}]) == []
+
+
+# --- forma della risposta dell'LLM (guasto del 7 settembre 2026: una scelta
+# valida restituita come oggetto singolo veniva scartata, niente articolo) ---
+
+
+def test_classifica_accetta_oggetto_singolo():
+    """La risposta esatta che il 7 settembre fece fallire l'autopilot."""
+    risposta = {"idx": 0, "perche": "Il dibattito sulle illustrazioni AI nel branding."}
+    out = ap.classifica_in_lista(risposta)
+    assert out == [risposta]
+    assert ap.indice_voce(out[0], 7) == 0
+
+
+def test_classifica_accetta_array_normale():
+    dati = [{"idx": 2, "perche": "a"}, {"idx": 0, "perche": "b"}]
+    assert ap.classifica_in_lista(dati) == dati
+
+
+def test_classifica_estrae_array_annidato():
+    dati = {"classifica": [{"idx": 1, "perche": "x"}]}
+    assert ap.classifica_in_lista(dati) == [{"idx": 1, "perche": "x"}]
+
+
+def test_classifica_scarta_forme_inutilizzabili():
+    assert ap.classifica_in_lista("testo") == []
+    assert ap.classifica_in_lista({"nota": "nessuna scelta"}) == []
+    assert ap.classifica_in_lista([1, 2, 3]) == []
+
+
+def test_indice_voce_tollera_stringa_e_rifiuta_fuori_scala():
+    assert ap.indice_voce({"idx": "2"}, 7) == 2
+    assert ap.indice_voce({"idx": 9}, 7) is None
+    assert ap.indice_voce({"idx": -1}, 7) is None
+    assert ap.indice_voce({"idx": True}, 7) is None, "True non è una scelta"
+    assert ap.indice_voce({"perche": "senza indice"}, 7) is None

@@ -47,6 +47,38 @@ def righe_lavorate(righe):
     ]
 
 
+def classifica_in_lista(dati):
+    """Riporta la risposta dell'LLM a una lista di dizionari.
+
+    L'array chiesto nel prompt non arriva sempre: certi modelli rispondono con
+    un solo oggetto (gia' la scelta migliore), altri annidano l'array dentro una
+    chiave. Il 7 settembre 2026 una risposta perfettamente valida —
+    {"idx": 0, "perche": ...} — e' stata scartata per questo e l'articolo della
+    sera non e' uscito.
+    """
+    if isinstance(dati, dict):
+        if "idx" in dati:
+            return [dati]
+        for valore in dati.values():
+            if isinstance(valore, list) and any(isinstance(x, dict) for x in valore):
+                return [x for x in valore if isinstance(x, dict)]
+        return []
+    if isinstance(dati, list):
+        return [x for x in dati if isinstance(x, dict)]
+    return []
+
+
+def indice_voce(voce, quanti):
+    """L'indice indicato dalla voce, se utilizzabile. Tollera l'intero scritto
+    come stringa ("2"), che alcuni modelli restituiscono."""
+    idx = voce.get("idx")
+    if isinstance(idx, bool):  # True varrebbe 1: non e' una scelta
+        return None
+    if isinstance(idx, str) and idx.strip().isdigit():
+        idx = int(idx)
+    return idx if isinstance(idx, int) and 0 <= idx < quanti else None
+
+
 def costruisci_prompt(candidati):
     righe = [
         f"[{i}] ({c.get('categoria') or '—'}) {c['title']} :: {c.get('summary', '')[:220]}"
@@ -95,11 +127,10 @@ def scegli(candidati, tentativi=3):
             max_tokens=2000,
             temperature=0.3,
         )
-        for voce in classifica if isinstance(classifica, list) else []:
-            if not isinstance(voce, dict):
-                continue
-            idx = voce.get("idx")
-            if isinstance(idx, int) and 0 <= idx < len(candidati):
+        classifica = classifica_in_lista(classifica)
+        for voce in classifica:
+            idx = indice_voce(voce, len(candidati))
+            if idx is not None:
                 return idx, classifica
         ultimo = str(classifica)[:200]
         print(f"  (risposta senza indice valido, ritento {tentativo + 1}/{tentativi})", flush=True)
@@ -147,8 +178,8 @@ def main():
     idx, classifica = scegli(righe)
     scelta = righe[idx]
     perche = ""
-    for voce in classifica if isinstance(classifica, list) else []:
-        if isinstance(voce, dict) and voce.get("idx") == idx:
+    for voce in classifica:
+        if indice_voce(voce, len(righe)) == idx:
             perche = str(voce.get("perche", ""))
             break
     print(f"Scelta: {scelta['title']}", flush=True)
@@ -158,11 +189,10 @@ def main():
         print("\n(AUTOPILOT_DRY_RUN=1: mi fermo qui, non scrivo e non pubblico)", flush=True)
         print("\nClassifica completa:", flush=True)
         for pos, voce in enumerate(classifica, 1):
-            if isinstance(voce, dict) and isinstance(voce.get("idx"), int):
-                i = voce["idx"]
-                if 0 <= i < len(righe):
-                    print(f"  {pos}. {righe[i]['title'][:70]}", flush=True)
-                    print(f"     {str(voce.get('perche', ''))[:150]}", flush=True)
+            i = indice_voce(voce, len(righe))
+            if i is not None:
+                print(f"  {pos}. {righe[i]['title'][:70]}", flush=True)
+                print(f"     {str(voce.get('perche', ''))[:150]}", flush=True)
         raise SystemExit(0)
 
     notion_sync.set_status(nt, scelta["page_id"], "In corso")
@@ -190,13 +220,14 @@ def main():
     print(f"Pubblicato ({giorno}), slug: {slug or '—'}", flush=True)
     _risveglia_sito()
 
-    scartate = "\n".join(
-        f"- {righe[v['idx']]['title']}: {str(v.get('perche', ''))[:160]}"
-        for v in (classifica if isinstance(classifica, list) else [])
-        if isinstance(v, dict)
-        and isinstance(v.get("idx"), int)
-        and v["idx"] != idx
-        and 0 <= v["idx"] < len(righe)
+    altre = [(indice_voce(v, len(righe)), v) for v in classifica]
+    scartate = (
+        "\n".join(
+            f"- {righe[i]['title']}: {str(v.get('perche', ''))[:160]}"
+            for i, v in altre
+            if i is not None and i != idx
+        )
+        or "(il modello ha indicato solo la vincitrice)"
     )
     send_email(
         f"🤖 {config.BRAND} in automatico — {scelta['title'][:70]}",
