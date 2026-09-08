@@ -265,3 +265,55 @@ def test_indice_voce_tollera_stringa_e_rifiuta_fuori_scala():
     assert ap.indice_voce({"idx": -1}, 7) is None
     assert ap.indice_voce({"idx": True}, 7) is None, "True non è una scelta"
     assert ap.indice_voce({"perche": "senza indice"}, 7) is None
+
+
+# --- selezione multipla: massimo 3 articoli a sera ---
+
+
+def _news(n):
+    return [
+        {"title": f"Notizia {i}", "summary": "riassunto", "categoria": "Arte e Fotografia"}
+        for i in range(n)
+    ]
+
+
+def _finto_llm(monkeypatch, risposta):
+    monkeypatch.setattr(ap.ke, "llm_json", lambda *a, **k: risposta)
+
+
+def test_scegli_prende_i_primi_tre_in_ordine_di_classifica(monkeypatch):
+    _finto_llm(monkeypatch, [{"idx": 4}, {"idx": 1}, {"idx": 6}, {"idx": 0}, {"idx": 2}])
+    scelte, _ = ap.scegli(_news(7), quanti=3)
+    assert [i for i, _ in scelte] == [4, 1, 6], "deve rispettare l'ordine dell'LLM"
+
+
+def test_scegli_ne_restituisce_meno_se_la_classifica_e_corta(monkeypatch):
+    """'Massimo 3', non 'sempre 3': con due candidati se ne pubblicano due."""
+    _finto_llm(monkeypatch, [{"idx": 0}, {"idx": 1}])
+    scelte, _ = ap.scegli(_news(7), quanti=3)
+    assert len(scelte) == 2
+
+
+def test_scegli_non_pubblica_due_volte_la_stessa_news(monkeypatch):
+    _finto_llm(monkeypatch, [{"idx": 2}, {"idx": 2}, {"idx": 5}])
+    scelte, _ = ap.scegli(_news(7), quanti=3)
+    assert [i for i, _ in scelte] == [2, 5]
+
+
+def test_scegli_ignora_gli_indici_fuori_scala(monkeypatch):
+    _finto_llm(monkeypatch, [{"idx": 99}, {"idx": 1}, {"idx": -3}, {"idx": 0}])
+    scelte, _ = ap.scegli(_news(3), quanti=3)
+    assert [i for i, _ in scelte] == [1, 0]
+
+
+def test_scegli_accetta_ancora_l_oggetto_singolo(monkeypatch):
+    """Il guasto del 7 settembre, ora nel percorso a più articoli."""
+    _finto_llm(monkeypatch, {"idx": 0, "perche": "unica indicata"})
+    scelte, _ = ap.scegli(_news(7), quanti=3)
+    assert [i for i, _ in scelte] == [0]
+
+
+def test_scegli_solleva_se_nessun_indice_valido(monkeypatch):
+    _finto_llm(monkeypatch, {"nota": "non saprei"})
+    with pytest.raises(RuntimeError):
+        ap.scegli(_news(7), quanti=3, tentativi=1)

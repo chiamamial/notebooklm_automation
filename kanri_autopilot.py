@@ -109,32 +109,68 @@ Ordina TUTTE le news dalla più promettente alla meno promettente. Per ognuna:
 Rispondi SOLO con un array JSON, niente altro."""
 
 
-def scegli(candidati, tentativi=3):
-    """(indice, classifica) della news più promettente, scelta dall'LLM.
+def scegli(candidati, quanti=1, tentativi=3):
+    """(scelte, classifica): le `quanti` news più promettenti, in ordine.
 
-    A volte il modello risponde con un JSON valido ma senza un indice
-    utilizzabile: si riprova invece di rinunciare alla serata. Se proprio non
-    arriva una scelta valida si solleva l'errore, così l'autopilot NON pubblica
-    nulla a caso.
+    `scelte` è una lista di (indice, voce) presa dalla classifica dell'LLM, che
+    il prompt chiede ordinata dalla migliore alla peggiore. Se il modello ne
+    indica meno di `quanti`, se ne pubblicano meno: "massimo 3", non "sempre 3".
+
+    A volte la risposta non contiene indici utilizzabili: si riprova. Se proprio
+    non arriva nulla di valido si solleva l'errore, così l'autopilot NON
+    pubblica a caso.
     """
     ultimo = ""
     for tentativo in range(tentativi):
-        classifica = ke.llm_json(
-            [
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": costruisci_prompt(candidati)},
-            ],
-            max_tokens=2000,
-            temperature=0.3,
+        classifica = classifica_in_lista(
+            ke.llm_json(
+                [
+                    {"role": "system", "content": SYSTEM},
+                    {"role": "user", "content": costruisci_prompt(candidati)},
+                ],
+                max_tokens=2000,
+                temperature=0.3,
+            )
         )
-        classifica = classifica_in_lista(classifica)
+        scelte, visti = [], set()
         for voce in classifica:
             idx = indice_voce(voce, len(candidati))
-            if idx is not None:
-                return idx, classifica
+            if idx is None or idx in visti:  # l'LLM a volte ripete un indice
+                continue
+            visti.add(idx)
+            scelte.append((idx, voce))
+            if len(scelte) >= quanti:
+                break
+        if scelte:
+            return scelte, classifica
         ultimo = str(classifica)[:200]
         print(f"  (risposta senza indice valido, ritento {tentativo + 1}/{tentativi})", flush=True)
     raise RuntimeError(f"l'LLM non ha indicato una news valida: {ultimo}")
+
+
+def scrivi_e_pubblica(nt, riga, giorno):
+    """Scrive l'articolo nella pagina Notion e lo manda online.
+    Se la scrittura fallisce la riga torna 'Da fare', lavorabile domani."""
+    notion_sync.set_status(nt, riga["page_id"], "In corso")
+    try:
+        body, cover, slug = genera_articolo(
+            riga["title"],
+            riga.get("summary", ""),
+            riga.get("fonte_url", ""),
+            categoria=riga.get("categoria", ""),
+            exclude_id=riga["page_id"],
+        )
+        notion_sync.append_markdown(nt, riga["page_id"], body)
+        if cover:
+            notion_sync.set_cover(nt, riga["page_id"], cover)
+        if slug:
+            notion_sync.set_slug(nt, riga["page_id"], slug)
+        notion_sync.set_status(nt, riga["page_id"], "Fatto")
+    except Exception:
+        notion_sync.set_status(nt, riga["page_id"], "Da fare")
+        raise
+    notion_sync.pubblica(nt, riga["page_id"], giorno)
+    return body, slug
 
 
 def _risveglia_sito():
@@ -174,73 +210,83 @@ def main():
             print(f"  - [{r['stato']}] {r['title'][:70]}", flush=True)
         raise SystemExit(0)
 
-    print("Brief intatto: scelgo la news con più potenziale di lettura", flush=True)
-    idx, classifica = scegli(righe)
-    scelta = righe[idx]
-    perche = ""
-    for voce in classifica:
-        if indice_voce(voce, len(righe)) == idx:
-            perche = str(voce.get("perche", ""))
-            break
-    print(f"Scelta: {scelta['title']}", flush=True)
-    print(f"  perché: {perche}", flush=True)
+    quanti = int(os.environ.get("AUTOPILOT_MAX", str(config.get("autopilot.max_articoli", 3))))
+    print(f"Brief intatto: scelgo fino a {quanti} news con più potenziale", flush=True)
+    scelte, classifica = scegli(righe, quanti=quanti)
+    print(f"Scelte {len(scelte)} news su {len(righe)}:", flush=True)
+    for pos, (idx, voce) in enumerate(scelte, 1):
+        print(f"  {pos}. {righe[idx]['title'][:70]}", flush=True)
+        print(f"     {str(voce.get('perche', ''))[:150]}", flush=True)
 
     if prova:
         print("\n(AUTOPILOT_DRY_RUN=1: mi fermo qui, non scrivo e non pubblico)", flush=True)
+        vincitori = {i for i, _ in scelte}
         print("\nClassifica completa:", flush=True)
         for pos, voce in enumerate(classifica, 1):
             i = indice_voce(voce, len(righe))
             if i is not None:
-                print(f"  {pos}. {righe[i]['title'][:70]}", flush=True)
-                print(f"     {str(voce.get('perche', ''))[:150]}", flush=True)
+                segno = "→" if i in vincitori else " "
+                print(f"  {segno} {pos}. {righe[i]['title'][:70]}", flush=True)
         raise SystemExit(0)
 
-    notion_sync.set_status(nt, scelta["page_id"], "In corso")
-    try:
-        body, cover, slug = genera_articolo(
-            scelta["title"],
-            scelta.get("summary", ""),
-            scelta.get("fonte_url", ""),
-            categoria=scelta.get("categoria", ""),
-            exclude_id=scelta["page_id"],
-        )
-        notion_sync.append_markdown(nt, scelta["page_id"], body)
-        if cover:
-            notion_sync.set_cover(nt, scelta["page_id"], cover)
-        if slug:
-            notion_sync.set_slug(nt, scelta["page_id"], slug)
-        notion_sync.set_status(nt, scelta["page_id"], "Fatto")
-        print("Articolo scritto nella pagina Notion", flush=True)
-    except Exception:
-        # niente articolo a metà: la riga torna lavorabile domani
-        notion_sync.set_status(nt, scelta["page_id"], "Da fare")
-        raise
+    # Ogni articolo va per conto suo: se il secondo fallisce, il primo resta
+    # online e il terzo viene comunque tentato.
+    pubblicati, falliti = [], []
+    for pos, (idx, voce) in enumerate(scelte, 1):
+        riga = righe[idx]
+        print(f"\n[{pos}/{len(scelte)}] {riga['title'][:70]}", flush=True)
+        try:
+            body, slug = scrivi_e_pubblica(nt, riga, giorno)
+            pubblicati.append(
+                {
+                    "titolo": riga["title"],
+                    "categoria": riga.get("categoria") or "—",
+                    "fonte": riga.get("fonte", ""),
+                    "perche": str(voce.get("perche", "")),
+                    "slug": slug or "—",
+                    "body": body,
+                }
+            )
+            print(f"  pubblicato, slug: {slug or '—'}", flush=True)
+        except Exception as e:
+            falliti.append((riga["title"], repr(e)[:200]))
+            print(f"  FALLITO: {repr(e)[:200]}", flush=True)
 
-    notion_sync.pubblica(nt, scelta["page_id"], giorno)
-    print(f"Pubblicato ({giorno}), slug: {slug or '—'}", flush=True)
+    if not pubblicati:
+        raise RuntimeError(
+            "nessun articolo pubblicato. Errori:\n" + "\n".join(f"- {t}: {e}" for t, e in falliti)
+        )
     _risveglia_sito()
 
-    altre = [(indice_voce(v, len(righe)), v) for v in classifica]
+    vincitori = {i for i, _ in scelte}
     scartate = (
         "\n".join(
             f"- {righe[i]['title']}: {str(v.get('perche', ''))[:160]}"
-            for i, v in altre
-            if i is not None and i != idx
+            for i, v in ((indice_voce(v, len(righe)), v) for v in classifica)
+            if i is not None and i not in vincitori
         )
-        or "(il modello ha indicato solo la vincitrice)"
+        or "(il modello ha indicato solo le vincitrici)"
     )
+    elenco = "\n".join(
+        f"{n}. **{a['titolo']}**\n"
+        f"   - Perché: {a['perche']}\n"
+        f"   - Categoria: {a['categoria']} · Slug: {a['slug']}\n"
+        f"   - Fonte: {a['fonte']}"
+        for n, a in enumerate(pubblicati, 1)
+    )
+    problemi = (
+        "\n\n## Non riusciti\n\n" + "\n".join(f"- {t}: {e}" for t, e in falliti) if falliti else ""
+    )
+    testi = "\n\n---\n\n".join(f"# {a['titolo']}\n\n{a['body']}" for a in pubblicati)
+    plurale = "articoli" if len(pubblicati) > 1 else "articolo"
     send_email(
-        f"🤖 {config.BRAND} in automatico — {scelta['title'][:70]}",
-        f"# {scelta['title']}\n\n"
+        f"🤖 {config.BRAND} in automatico — {len(pubblicati)} {plurale}",
         f"Il brief del {giorno} non è stato lavorato, così l'autopilot ha scelto, "
-        f"scritto e pubblicato questa news.\n\n"
-        f"**Perché questa:** {perche}\n\n"
-        f"**Categoria:** {scelta.get('categoria') or '—'}\n"
-        f"**Slug:** {slug or '—'}\n"
-        f"**Fonte:** {scelta.get('fonte', '')}\n\n"
-        f"Se non ti convince, in Notion puoi togliere la spunta `Pubblica`.\n\n"
+        f"scritto e pubblicato {len(pubblicati)} {plurale} su {len(righe)} news.\n\n"
+        f"{elenco}{problemi}\n\n"
+        f"Se qualcuno non ti convince, in Notion puoi togliere la spunta `Pubblica`.\n\n"
         f"---\n\n## Le altre, e perché sono state scartate\n\n{scartate}\n\n"
-        f"---\n\n{body}",
+        f"---\n\n{testi}",
     )
 
 
